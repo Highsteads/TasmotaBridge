@@ -28,4 +28,30 @@
         </ConfigUI>
     </Event>
 
+    <Event id="buttonPressed">
+        <Name>Tasmota Button Pressed</Name>
+        <ConfigUI>
+            <Field id="targetAddress" type="textfield" defaultValue="">
+                <Label>MAC Address (blank = any):</Label>
+            </Field>
+            <Field id="targetButton" type="textfield" defaultValue="">
+                <Label>Button Number (blank = any):</Label>
+                <Description>1-8 for multi-button devices, blank to match any button on the target device.</Description>
+            </Field>
+            <Field id="targetAction" type="menu" defaultValue="">
+                <Label>Action:</Label>
+                <List>
+                    <Option value="">Any action</Option>
+                    <Option value="SINGLE">Single press</Option>
+                    <Option value="DOUBLE">Double press</Option>
+                    <Option value="TRIPLE">Triple press</Option>
+                    <Option value="QUAD">Quadruple press</Option>
+                    <Option value="PENTA">Quintuple press</Option>
+                    <Option value="HOLD">Long hold</Option>
+                    <Option value="CLEAR">Released</Option>
+                </List>
+            </Field>
+        </ConfigUI>
+    </Event>
+
 </Events>

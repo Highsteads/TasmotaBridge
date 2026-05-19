@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.6.2
+# Version:     0.7.0
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.6.2"
+PLUGIN_VERSION  = "0.7.0"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -91,16 +91,27 @@ def normalise_mac(raw):
 
 
 def is_valid_state_id(key):
-    """Indigo state IDs: ASCII alphanumeric only, must start with a letter."""
+    """Indigo state IDs: ASCII alphanumeric only, must start with a letter.
+    See feedback_indigo_state_id_naming_rules - underscores not allowed."""
     if not key or not key[0].isascii() or not key[0].isalpha():
         return False
     return all(c.isascii() and c.isalnum() for c in key)
 
 
 def snake_to_camel(snake):
-    """Convert tasmota_field_name -> tasmotaFieldName for Indigo state IDs."""
+    """Convert tasmota_field_name or Tasmota-name -> tasmotaFieldName for
+    Indigo state IDs. Indigo rejects underscores and hyphens in state IDs."""
     parts = snake.replace("-", "_").split("_")
     return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
+
+
+def sensor_state_id(sensor_name, field_name):
+    """Build a state ID for a sensor field. e.g. ('DS18B20-1','Temperature')
+    -> 'ds18b201Temperature'. Validates the result is a legal Indigo state ID."""
+    base = snake_to_camel(sensor_name)
+    suffix = field_name[0].upper() + field_name[1:] if field_name else ""
+    candidate = base + suffix
+    return candidate if is_valid_state_id(candidate) else None
 
 
 # ============================================================
@@ -311,7 +322,12 @@ class Plugin(indigo.PluginBase):
             self._auto_create_or_update_device(mac)
 
     def _detect_device_type(self, config, sensors):
-        """Map discovery payload to Indigo deviceTypeId. Returns (type_id, channel)."""
+        """Map discovery payload to Indigo deviceTypeId. Returns (type_id, channel).
+
+        Single-channel devices return channel=1 (or the first non-zero rl[]).
+        Multi-channel devices return type for the FIRST channel; the caller is
+        responsible for spawning sibling devices for channels 2..N.
+        """
         sht = config.get("sht", []) or []
         if any(sht):
             return ("tasmotaShutter", 1)
@@ -325,12 +341,36 @@ class Plugin(indigo.PluginBase):
         has_energy = bool(sensors and "sn" in sensors and "ENERGY" in sensors["sn"])
 
         if relays_present:
+            # Only the first-channel device carries energy states. Sibling
+            # channels created later are plain tasmotaRelay regardless of
+            # whether the parent monitors energy.
             if has_energy:
                 return ("tasmotaEnergyPlug", relays_present[0])
             return ("tasmotaRelay", relays_present[0])
 
-        # No relays, no light - must be sensor-only
+        # No relays, no light - buttons-only or sensor-only
+        btn = config.get("btn", []) or []
+        if any(btn):
+            return ("tasmotaButton", 1)
+
         return ("tasmotaSensor", 0)
+
+    def _relay_channels(self, config):
+        """Return list of channel numbers (1..N) that have an active relay."""
+        rl = config.get("rl", []) or []
+        return [i + 1 for i, v in enumerate(rl) if v]
+
+    def _sibling_address(self, base_mac, channel):
+        """Address scheme for multi-relay siblings:
+           channel 1 keeps the bare MAC (primary device);
+           channels 2+ get MAC-N suffix."""
+        return base_mac if channel == 1 else f"{base_mac}-{channel}"
+
+    def _sibling_name(self, base_name, channel, total_channels):
+        """Naming scheme for sibling devices."""
+        if total_channels <= 1:
+            return base_name
+        return f"{base_name} - Ch {channel}"
 
     def _auto_create_or_update_device(self, mac):
         entry = self.discovery_cache.get(mac, {})
@@ -349,10 +389,29 @@ class Plugin(indigo.PluginBase):
             return
 
         type_id, channel = self._detect_device_type(config, sensors)
-        name = config.get("dn") or config.get("hn") or f"Tasmota {mac[-6:]}"
+        base_name = config.get("dn") or config.get("hn") or f"Tasmota {mac[-6:]}"
+        channels  = self._relay_channels(config) if type_id in ("tasmotaRelay", "tasmotaEnergyPlug") else [channel]
+        total     = len(channels)
 
+        for n in channels:
+            # Channel 1 keeps the primary type (may be tasmotaEnergyPlug);
+            # additional channels are always plain tasmotaRelay since
+            # ENERGY metering is per-device not per-channel in Tasmota.
+            ch_type    = type_id if n == channels[0] else "tasmotaRelay"
+            ch_address = self._sibling_address(mac, n)
+            ch_name    = self._sibling_name(base_name, n, total)
+            self._create_one_device(
+                mac=mac, address=ch_address, name=ch_name, channel=n,
+                type_id=ch_type, config=config, sensors=sensors,
+            )
+
+    def _create_one_device(self, mac, address, name, channel, type_id, config, sensors):
+        """Create a single Indigo device. mac is used as the routing key
+        (always the bare MAC); address is what Indigo stores (MAC for ch1,
+        MAC-N for siblings).
+        """
         props = {
-            "address":   mac,
+            "address":   address,
             "topic":     config.get("t", ""),
             "channel":   str(channel),
             "ip":        config.get("ip", ""),
@@ -376,24 +435,27 @@ class Plugin(indigo.PluginBase):
             dev = indigo.device.create(
                 protocol=indigo.kProtocol.Plugin,
                 pluginId=self.pluginId,
-                address=mac,
+                address=address,
                 name=name,
                 deviceTypeId=type_id,
                 props=props,
                 folder=folder_id,
             )
-            # subModel renders next to the device name in the Indigo list - put
-            # the IP + model there so users can identify devices at a glance.
             ip    = config.get("ip", "")
             model = config.get("md", "")
             sub   = f"{ip} - {model}" if ip and model else (ip or model)
             if sub:
                 dev.subModel = sub
                 dev.replaceOnServer()
-            self.devices_by_mac[mac] = dev
-            self.logger.info(f"Created Indigo device: {dev.name} (type={type_id}, address={mac}) in folder '{DEVICE_FOLDER_NAME}'")
+            # Cache by bare MAC for routing - all sibling channels live under
+            # the same MAC key; lookup-by-topic+channel happens in handlers.
+            self.devices_by_mac.setdefault(mac, dev)
+            self.logger.info(
+                f"Created Indigo device: {dev.name} (type={type_id}, "
+                f"address={address}, ch={channel}) in folder '{DEVICE_FOLDER_NAME}'"
+            )
         except Exception:
-            self.logger.exception(f"Failed to create Indigo device for MAC {mac}")
+            self.logger.exception(f"Failed to create Indigo device for address {address}")
 
     def _refresh_device_props(self, dev, config, sensors):
         """Update read-only props (model/firmware/IP) from latest discovery,
@@ -448,21 +510,40 @@ class Plugin(indigo.PluginBase):
             self._handle_sensor(dev, payload)
 
     def _handle_stat(self, topic_name, kind, payload):
+        kind_u = kind.upper()
+        if kind_u.startswith("POWER"):
+            # Plain "ON"/"OFF" - relay state change. POWER (no number) is
+            # channel 1; POWER1..POWER8 are explicit channel numbers.
+            channel = 1
+            suffix = kind_u[5:]
+            if suffix and suffix.isdigit():
+                channel = int(suffix)
+            dev = self._find_device_by_topic_channel(topic_name, channel)
+            if dev:
+                on = payload.strip().upper() == "ON"
+                self._update_relay_state(dev, on)
+            return
+
+        # Non-POWER stat messages route to the primary (channel 1) device
         dev = self._find_device_by_topic(topic_name)
         if not dev:
             return
-
-        if kind.upper().startswith("POWER"):
-            # Plain text "ON"/"OFF" - relay state change
-            on = payload.strip().upper() == "ON"
-            self._update_relay_state(dev, on)
-        elif kind.upper() == "RESULT":
-            # JSON with command result
+        if kind_u == "RESULT":
             try:
                 data = json.loads(payload)
             except json.JSONDecodeError:
                 return
             self._handle_result(dev, data)
+
+    def _find_device_by_topic_channel(self, topic_name, channel):
+        """Look up an Indigo device by Tasmota topic AND relay channel.
+        Falls back to topic-only match (channel 1) if no match."""
+        target_ch = str(channel)
+        for dev in indigo.devices.iter("self"):
+            if dev.pluginProps.get("topic") == topic_name \
+                    and dev.pluginProps.get("channel", "1") == target_ch:
+                return dev
+        return None
 
     def _find_device_by_topic(self, topic_name):
         """Look up an Indigo device by its Tasmota base topic."""
@@ -499,13 +580,17 @@ class Plugin(indigo.PluginBase):
         if mac:
             self.last_seen[mac] = time.time()
 
-        # POWER (or POWER1..POWER8) - relay state
-        channel = dev.pluginProps.get("channel", "1")
-        power_key = "POWER" if channel == "1" else f"POWER{channel}"
-        if power_key in data:
-            self._update_relay_state(dev, data[power_key] == "ON")
-        elif "POWER" in data and channel == "1":
-            self._update_relay_state(dev, data["POWER"] == "ON")
+        # POWER and POWER1..POWERn keys - route each to the matching channel's
+        # sibling device. For single-channel devices, the channel-1 sibling
+        # IS the primary so this loop just updates `dev` itself.
+        topic_name = dev.pluginProps.get("topic", "")
+        for key, val in data.items():
+            if not key.startswith("POWER"):
+                continue
+            suffix = key[5:]
+            channel = int(suffix) if suffix.isdigit() else 1
+            sibling = self._find_device_by_topic_channel(topic_name, channel) or dev
+            self._update_relay_state(sibling, val == "ON")
 
         # Wi-Fi diagnostics
         wifi = data.get("Wifi", {})
@@ -515,6 +600,8 @@ class Plugin(indigo.PluginBase):
             dev.updateStateOnServer("signal", int(wifi["Signal"]))
         if "Uptime" in data:
             dev.updateStateOnServer("uptime", data["Uptime"])
+        if "RestartReason" in data:
+            dev.updateStateOnServer("restartReason", data["RestartReason"])
         dev.updateStateOnServer("lastSeen", data.get("Time", datetime.now().isoformat()))
 
     def _handle_sensor(self, dev, payload):
@@ -542,18 +629,197 @@ class Plugin(indigo.PluginBase):
             if updates:
                 dev.updateStatesOnServer(updates)
 
-        # TODO: handle DS18B20-N, BME280, AM2301, etc. via dynamic state declaration
+        # Dynamic capture of any other sensors. Tasmota publishes sensor
+        # readings under named keys at the top level of the SENSOR payload:
+        #   "DS18B20-1": {"Id":"...", "Temperature": 21.4}
+        #   "BME280":    {"Temperature": 22.1, "Humidity": 55, "Pressure": 1013}
+        #   "AM2301":    {"Temperature": 21.0, "Humidity": 48, "DewPoint": 9.9}
+        # We flatten each into camelCase state IDs (bme280Temperature,
+        # bme280Humidity, etc.) and write them via dynamic state declaration.
+        skip_top_level = {"Time", "TempUnit", "PressureUnit", "ENERGY"}
+        new_states = []
+        for sensor_name, payload in data.items():
+            if sensor_name in skip_top_level or not isinstance(payload, dict):
+                continue
+            for field_name, val in payload.items():
+                # Skip identifier-only fields
+                if field_name in ("Id", "Type"):
+                    continue
+                state_id = sensor_state_id(sensor_name, field_name)
+                if not state_id:
+                    continue
+                self._capture_dynamic_state(dev, state_id, val, new_states)
+        if new_states:
+            self._refresh_state_list_for_new_states(dev, new_states)
 
     def _handle_result(self, dev, data):
-        # Command results - useful for confirming dimmer / colour changes
-        # TODO: parse Dimmer, Color, CT, ShutterPosition responses
-        pass
+        """Parse a stat/<topic>/RESULT JSON payload.
+
+        Tasmota sends a wide variety of RESULT shapes here. We handle the
+        main ones explicitly and let the rest fall through unhandled.
+        """
+        # Button events: {"Button1": "SINGLE"}, {"Button2": "HOLD"}, etc.
+        for k, v in data.items():
+            if k.startswith("Button") and k[6:].isdigit():
+                try:
+                    button_num = int(k[6:])
+                except ValueError:
+                    continue
+                action = str(v).upper()
+                self._fire_button_event(dev, button_num, action)
+
+        # Dimmer: {"POWER":"ON","Dimmer":50}
+        if "Dimmer" in data and dev.deviceTypeId == "tasmotaLight":
+            try:
+                level = int(data["Dimmer"])
+                dev.updateStateOnServer("brightnessLevel", max(0, min(100, level)))
+            except (TypeError, ValueError):
+                pass
+
+        # CT (mireds): {"CT": 300}
+        if "CT" in data and dev.deviceTypeId == "tasmotaLight":
+            try:
+                dev.updateStateOnServer("colorTemp", int(data["CT"]))
+            except (TypeError, ValueError):
+                pass
+
+        # HSBColor: "0,100,100"
+        if "HSBColor" in data and dev.deviceTypeId == "tasmotaLight":
+            dev.updateStateOnServer("hsbColor", str(data["HSBColor"]))
+
+        # Color: "#RRGGBB" or "RRGGBB"
+        if "Color" in data and dev.deviceTypeId == "tasmotaLight":
+            dev.updateStateOnServer("hsbColor", str(data["Color"]))
+
+        # Shutter position: {"Shutter1":{"Position":50, "Direction":0, ...}}
+        for k, v in data.items():
+            if k.startswith("Shutter") and isinstance(v, dict) and dev.deviceTypeId == "tasmotaShutter":
+                if "Position" in v:
+                    try:
+                        dev.updateStateOnServer("brightnessLevel", int(v["Position"]))
+                    except (TypeError, ValueError):
+                        pass
+                if "Direction" in v:
+                    direction_map = {-1: "closing", 0: "stopped", 1: "opening"}
+                    try:
+                        dev.updateStateOnServer("direction", direction_map.get(int(v["Direction"]), str(v["Direction"])))
+                    except (TypeError, ValueError):
+                        pass
+
+    def _fire_button_event(self, dev, button_num, action):
+        """Update device button states and fire buttonPressed triggers."""
+        # Increment press count so triggers fire on repeated identical presses
+        try:
+            count = int(dev.states.get("pressCount", 0) or 0) + 1
+        except (TypeError, ValueError):
+            count = 1
+        dev.updateStatesOnServer([
+            {"key": "lastButton",  "value": button_num},
+            {"key": "lastAction",  "value": action},
+            {"key": "pressCount",  "value": count},
+        ])
+        self.logger.debug(f"{dev.name}: Button{button_num} {action}")
+
+        # Fire matching triggers
+        mac = dev.pluginProps.get("address", "")
+        # Strip any "-N" sibling suffix to get the bare MAC for matching
+        bare_mac = mac.split("-")[0]
+        for trigger in self.event_triggers.values():
+            if trigger.pluginTypeId != "buttonPressed":
+                continue
+            tprops    = trigger.pluginProps
+            t_mac     = (tprops.get("targetAddress") or "").strip()
+            t_btn_str = (tprops.get("targetButton")  or "").strip()
+            t_action  = (tprops.get("targetAction")  or "").strip()
+            if t_mac and normalise_mac(t_mac) != bare_mac:
+                continue
+            if t_btn_str:
+                try:
+                    if int(t_btn_str) != button_num:
+                        continue
+                except ValueError:
+                    continue
+            if t_action and t_action.upper() != action:
+                continue
+            indigo.trigger.execute(trigger)
 
     def _update_relay_state(self, dev, on_state):
         if dev.deviceTypeId in ("tasmotaRelay", "tasmotaEnergyPlug"):
             dev.updateStateOnServer("onOffState", on_state)
         elif dev.deviceTypeId == "tasmotaLight":
             dev.updateStateOnServer("onOffState", on_state)
+
+    # --------------------------------------------------------
+    # Dynamic state declaration (z2mbridge v1.7 pattern)
+    # --------------------------------------------------------
+    # Any unhandled sensor field becomes a custom state on the device, so
+    # exotic Tasmota sensor combinations work without code changes.
+
+    def _capture_dynamic_state(self, dev, state_id, value, new_states):
+        """Write a dynamic state. If state didn't exist before, append to
+        new_states so the caller can refresh the device's state list."""
+        seen_key = "seenDynamicKeys"
+        seen = (dev.pluginProps.get(seen_key) or "").split(",")
+        is_new = state_id not in dev.states and state_id not in seen
+        try:
+            if isinstance(value, bool):
+                dev.updateStateOnServer(state_id, bool(value))
+            elif isinstance(value, int):
+                dev.updateStateOnServer(state_id, int(value))
+            elif isinstance(value, float):
+                dev.updateStateOnServer(state_id, float(value))
+            elif isinstance(value, (dict, list)):
+                dev.updateStateOnServer(state_id, json.dumps(value))
+            elif value is None:
+                dev.updateStateOnServer(state_id, "")
+            else:
+                dev.updateStateOnServer(state_id, str(value))
+            if is_new:
+                new_states.append(state_id)
+        except Exception as exc:
+            # State not declared yet - record so we can refresh state list
+            if "not defined" in str(exc).lower():
+                new_states.append(state_id)
+            else:
+                self.logger.debug(f"Failed to set {state_id}={value!r} on {dev.name}: {exc}")
+
+    def _refresh_state_list_for_new_states(self, dev, new_states):
+        """Persist newly-seen state IDs in pluginProps and ask Indigo to
+        refresh the device's state list so they become visible."""
+        seen_key = "seenDynamicKeys"
+        existing = set((dev.pluginProps.get(seen_key) or "").split(","))
+        existing.discard("")
+        updated = existing | set(new_states)
+        if updated == existing:
+            return
+        props = dict(dev.pluginProps)
+        props[seen_key] = ",".join(sorted(updated))
+        try:
+            dev.replacePluginPropsOnServer(props)
+            dev.stateListOrDisplayStateIdChanged()
+        except Exception as exc:
+            self.logger.debug(f"State-list refresh on {dev.name} failed: {exc}")
+
+    def getDeviceStateList(self, dev):
+        """Override to advertise dynamically-captured states to Indigo so
+        they appear in the device's Custom States panel and trigger menus.
+
+        IMPORTANT: PluginBase.getDeviceStateList returns a LIVE reference,
+        not a copy - mutating it corrupts the parser cache. Always copy.
+        """
+        state_list = list(indigo.PluginBase.getDeviceStateList(self, dev) or [])
+        seen = (dev.pluginProps.get("seenDynamicKeys") or "").split(",")
+        already_declared = {s.get("Key") for s in state_list if isinstance(s, dict)}
+        for state_id in seen:
+            if not state_id or state_id in already_declared:
+                continue
+            # Default to String type - actual value coercion happens at write.
+            # Number/Integer-typed states would be nicer for triggers but we
+            # don't always know the type up front. String works for everything.
+            state_list.append(
+                self.getDeviceStateDictForStringType(state_id, state_id, state_id)
+            )
+        return state_list
 
     # --------------------------------------------------------
     # Outbound commands
@@ -671,6 +937,13 @@ class Plugin(indigo.PluginBase):
 
     def actionRequestStatus(self, action, dev):
         self._publish_command(dev, "Status", "0")
+
+    def actionReboot(self, action, dev):
+        """Publish cmnd/topic/Restart 1 - device reboots within a second.
+        Reconnects to MQTT after ~5-10s. Useful for troubleshooting flaky
+        devices or applying a setting change that requires a reboot."""
+        self.logger.info(f"{dev.name}: rebooting (cmnd Restart 1)")
+        self._publish_command(dev, "Restart", "1")
 
     # --------------------------------------------------------
     # One-click firmware upgrade

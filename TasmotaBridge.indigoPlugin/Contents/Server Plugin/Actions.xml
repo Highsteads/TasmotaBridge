@@ -74,4 +74,9 @@
         <CallbackMethod>actionUpgradeFirmware</CallbackMethod>
     </Action>
 
+    <Action id="reboot" deviceFilter="self">
+        <Name>Reboot Device</Name>
+        <CallbackMethod>actionReboot</CallbackMethod>
+    </Action>
+
 </Actions>

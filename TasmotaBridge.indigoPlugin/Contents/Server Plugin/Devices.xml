@@ -38,6 +38,8 @@
             <Field id="firmware" type="textfield" readonly="true" defaultValue="">
                 <Label>Firmware:</Label>
             </Field>
+            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
             <State id="availability">
@@ -69,6 +71,11 @@
                 <ValueType>String</ValueType>
                 <TriggerLabel>Firmware Status Changed</TriggerLabel>
                 <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
+            <State id="restartReason">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Restart Reason Changed</TriggerLabel>
+                <ControlPageLabel>Restart Reason</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -103,6 +110,8 @@
             </Field>
             <Field id="SupportsEnergyMeter" type="checkbox" hidden="true" defaultValue="true"/>
             <Field id="SupportsEnergyMeterCurPower" type="checkbox" hidden="true" defaultValue="true"/>
+            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
             <!-- Indigo natively shows curEnergyLevel + accumEnergyTotal on energy devices.
@@ -172,6 +181,11 @@
                 <TriggerLabel>Firmware Status Changed</TriggerLabel>
                 <ControlPageLabel>Firmware Status</ControlPageLabel>
             </State>
+            <State id="restartReason">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Restart Reason Changed</TriggerLabel>
+                <ControlPageLabel>Restart Reason</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -203,6 +217,8 @@
             <Field id="SupportsRGB" type="checkbox" hidden="true" defaultValue="false"/>
             <Field id="SupportsWhite" type="checkbox" hidden="true" defaultValue="false"/>
             <Field id="SupportsWhiteTemperature" type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
             <State id="colorMode">
@@ -234,6 +250,11 @@
                 <ValueType>String</ValueType>
                 <TriggerLabel>Firmware Status Changed</TriggerLabel>
                 <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
+            <State id="restartReason">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Restart Reason Changed</TriggerLabel>
+                <ControlPageLabel>Restart Reason</ControlPageLabel>
             </State>
         </States>
     </Device>
@@ -281,6 +302,70 @@
                 <TriggerLabel>Firmware Status Changed</TriggerLabel>
                 <ControlPageLabel>Firmware Status</ControlPageLabel>
             </State>
+            <State id="restartReason">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Restart Reason Changed</TriggerLabel>
+                <ControlPageLabel>Restart Reason</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         tasmotaButton - Tasmota wall switch / scene controller button
+         Fires triggers on physical button press (SINGLE/DOUBLE/HOLD).
+         No relay output - pure input device.
+         ================================================================ -->
+    <Device type="sensor" id="tasmotaButton">
+        <Name>Tasmota Button</Name>
+        <ConfigUI>
+            <Field id="address" type="textfield" defaultValue="">
+                <Label>MAC Address:</Label>
+            </Field>
+            <Field id="topic" type="textfield" defaultValue="">
+                <Label>MQTT Topic:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
+        </ConfigUI>
+        <States>
+            <State id="lastButton">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Button Number Changed</TriggerLabel>
+                <ControlPageLabel>Last Button</ControlPageLabel>
+            </State>
+            <State id="lastAction">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Action Changed</TriggerLabel>
+                <ControlPageLabel>Last Action</ControlPageLabel>
+            </State>
+            <State id="pressCount">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Press Count Changed</TriggerLabel>
+                <ControlPageLabel>Total Presses</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="rssi">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
+                <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+            <State id="firmwareStatus">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Status Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
+            <State id="restartReason">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Restart Reason Changed</TriggerLabel>
+                <ControlPageLabel>Restart Reason</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -307,6 +392,8 @@
             <Field id="model" type="textfield" readonly="true" defaultValue="">
                 <Label>Model:</Label>
             </Field>
+            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
             <State id="direction">
@@ -323,6 +410,11 @@
                 <ValueType>String</ValueType>
                 <TriggerLabel>Firmware Status Changed</TriggerLabel>
                 <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
+            <State id="restartReason">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Restart Reason Changed</TriggerLabel>
+                <ControlPageLabel>Restart Reason</ControlPageLabel>
             </State>
         </States>
     </Device>

@@ -11,18 +11,50 @@ multi-protocol home automation broker setup.
 
 ## Status
 
-**Pre-release / scaffold.** Currently in development. Use at your own risk.
+**Public beta (v0.7.x).** The core relay + energy paths are fully validated
+on Athom plugs running Tasmota 15.4.0. Other device types compile and
+respond to commands but have not been validated against real hardware yet —
+testers welcome (see Supported Devices below). Report issues at the GitHub
+repo.
 
-## Features (planned)
+## Features
 
 - **Auto-discovery** via Tasmota's native `tasmota/discovery/<MAC>/` topic
   (enabled by default in Tasmota 11+ via SetOption147)
-- **Native Indigo device types** — relays, dimmers, RGB/RGBW lights, energy plugs,
-  environmental sensors, shutters
-- **HTTP control fallback** when MQTT is unavailable
-- **Dynamic state capture** — every unknown payload field becomes a queryable
-  device state automatically
+- **Native Indigo device types** — relays, energy plugs, lights, sensors,
+  shutters, buttons
+- **Multi-relay devices** — Sonoff 4CH and similar create one Indigo device
+  per active relay channel automatically
+- **Dynamic sensor capture** — DS18B20, BME280, AM2301, DHT22, etc. — every
+  field in the SENSOR payload becomes a custom Indigo state automatically,
+  no plugin code changes needed
+- **Firmware monitoring** — startup banner shows latest Tasmota release from
+  GitHub, per-device `firmwareStatus` state, summary at boot of which devices
+  need updating
+- **One-click firmware upgrade** — Plugins menu picker auto-detects ESP
+  architecture and triggers `Backlog OtaUrl <correct-url>; Upgrade 1`
+- **Button triggers** — Tasmota wall switches and scene controllers surface
+  SINGLE / DOUBLE / TRIPLE / HOLD / etc. as Indigo triggers, with per-device
+  and per-button filters
+- **Restart reason tracking** — `restartReason` state shows why each device
+  last rebooted (Power On, Software, Watchdog, etc.)
 - **No cloud, no third-party servers** — purely local MQTT
+
+## Supported Devices
+
+| Class | Status | Examples |
+|---|---|---|
+| Single-relay plug | ✅ Validated | Sonoff Basic, Athom plug, generic ESP8266+relay |
+| Energy-monitoring plug | ✅ Validated | Sonoff POW (R1/R2/R3), Athom PG04-UK16A, Athom Smart Plug |
+| Multi-relay device | 🟡 Code complete, beta-test welcome | Sonoff 4CH, dual-channel plugs |
+| Environmental sensors | 🟡 Dynamic capture wired, beta-test welcome | Sonoff TH (DS18B20), BME280, AM2301, DHT22, AHT10 |
+| Wall switches / buttons | 🟡 Code complete, beta-test welcome | Sonoff T1/T2/T3, Sonoff 4-button, generic GPIO-button devices |
+| Dimmer | 🟡 Best-effort, beta-test welcome | Athom dimmer, MagicHome dimmer |
+| RGB / RGBW / RGBCW bulbs | 🟡 Best-effort, beta-test welcome | Athom bulbs, generic Wi-Fi bulbs flashed with Tasmota |
+| Shutters / blinds | 🟡 Best-effort, beta-test welcome | Sonoff Dual R2 / R3 in shutter mode, MJ-SD01 |
+
+✅ = author tested against real hardware
+🟡 = code written from Tasmota documentation but not yet validated against the device class; expect rough edges
 
 ## Compatibility
 
