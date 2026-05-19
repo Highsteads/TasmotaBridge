@@ -69,4 +69,9 @@
         <CallbackMethod>actionOpenFirmwarePage</CallbackMethod>
     </Action>
 
+    <Action id="upgradeFirmware" deviceFilter="self">
+        <Name>Upgrade Firmware (one-click)</Name>
+        <CallbackMethod>actionUpgradeFirmware</CallbackMethod>
+    </Action>
+
 </Actions>

@@ -16,8 +16,24 @@
         <CallbackMethod>dumpDiscoveryCache</CallbackMethod>
     </MenuItem>
 
+    <MenuItem id="upgradeFirmware">
+        <Name>Upgrade Tasmota Firmware...</Name>
+        <CallbackMethod>menuUpgradeFirmware</CallbackMethod>
+        <ButtonTitle>Upgrade</ButtonTitle>
+        <ConfigUI>
+            <Field id="targetDevice" type="menu">
+                <Label>Device:</Label>
+                <List class="self" filter="" method="pickTasmotaDeviceWithStatus" dynamicReload="true"/>
+            </Field>
+            <Field id="confirm" type="checkbox" defaultValue="false">
+                <Label>Yes, upgrade this device now:</Label>
+                <Description>The device will reboot during the upgrade and be unavailable for ~30-60 seconds. Plugin auto-detects ESP architecture and uses the matching official Tasmota OTA URL.</Description>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
+
     <MenuItem id="openDevicePage">
-        <Name>Open Tasmota Device Page...</Name>
+        <Name>Open Tasmota Device Web UI...</Name>
         <CallbackMethod>menuOpenDevicePage</CallbackMethod>
         <ButtonTitle>Open</ButtonTitle>
         <ConfigUI>
@@ -25,18 +41,8 @@
                 <Label>Device:</Label>
                 <List class="self" filter="" method="pickTasmotaDevice" dynamicReload="true"/>
             </Field>
-            <Field id="page" type="menu" defaultValue="up">
-                <Label>Page:</Label>
-                <List>
-                    <Option value="">Main Page (/)</Option>
-                    <Option value="up">Firmware Upgrade (/up)</Option>
-                    <Option value="cs">Configure Other (/cs)</Option>
-                    <Option value="cn">Console (/cn)</Option>
-                    <Option value="in">Information (/in)</Option>
-                </List>
-            </Field>
             <Field id="note" type="label" fontColor="darkgray">
-                <Label>Opens in the default browser on the Indigo Mac, not on a remote Indigo client.</Label>
+                <Label>Opens the device's main web page in the default browser on the Indigo Mac. (For firmware upgrades, use the Upgrade Tasmota Firmware menu.)</Label>
             </Field>
         </ConfigUI>
     </MenuItem>

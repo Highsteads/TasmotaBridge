@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.5.1
+# Version:     0.6.1
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.5.1"
+PLUGIN_VERSION  = "0.6.1"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -672,6 +672,124 @@ class Plugin(indigo.PluginBase):
     def actionRequestStatus(self, action, dev):
         self._publish_command(dev, "Status", "0")
 
+    # --------------------------------------------------------
+    # One-click firmware upgrade
+    # --------------------------------------------------------
+
+    def _detect_device_architecture(self, dev):
+        """Determine ESP architecture for a device. Returns 'ESP32', 'ESP8266',
+        or None on failure. Caches the result in pluginProps so subsequent
+        upgrades skip the HTTP probe.
+        """
+        cached = dev.pluginProps.get("arch", "")
+        if cached in ("ESP32", "ESP8266"):
+            return cached
+
+        ip = dev.pluginProps.get("ip", "")
+        if not ip:
+            return None
+        try:
+            import requests
+            resp = requests.get(
+                f"http://{ip}/cm",
+                params={"cmnd": "Status 2"},
+                timeout=5,
+            )
+            if resp.status_code != 200:
+                return None
+            hw = (resp.json().get("StatusFWR", {}).get("Hardware", "") or "").upper()
+            if "ESP32" in hw:
+                arch = "ESP32"
+            elif "ESP8266" in hw or "ESP8285" in hw:
+                arch = "ESP8266"
+            else:
+                return None
+            # Cache in pluginProps
+            props = dict(dev.pluginProps)
+            props["arch"] = arch
+            dev.replacePluginPropsOnServer(props)
+            return arch
+        except Exception as exc:
+            self.logger.debug(f"Architecture probe of {ip} failed: {exc}")
+            return None
+
+    def actionUpgradeFirmware(self, action, dev):
+        """Detect ESP architecture, set OTA URL to the matching official
+        Tasmota release, and trigger Upgrade 1. The device reboots and
+        reconnects to MQTT within ~30-60 seconds.
+        """
+        ip    = dev.pluginProps.get("ip", "")
+        topic = dev.pluginProps.get("topic", "")
+        if not topic:
+            self.logger.warning(f"{dev.name}: no MQTT topic; cannot trigger upgrade")
+            return
+        if not ip:
+            self.logger.warning(
+                f"{dev.name}: no IP recorded; cannot probe architecture for OTA URL"
+            )
+            return
+
+        arch = self._detect_device_architecture(dev)
+        if arch == "ESP32":
+            ota_url = "http://ota.tasmota.com/tasmota32/release/tasmota32.bin.gz"
+        elif arch == "ESP8266":
+            ota_url = "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"
+        else:
+            self.logger.warning(
+                f"{dev.name}: could not detect ESP architecture (HTTP probe failed). "
+                "Open the device's /up page manually."
+            )
+            return
+
+        self.logger.info(
+            f"{dev.name}: setting OTA URL to {ota_url} and triggering upgrade ({arch})"
+        )
+        # Backlog runs multiple commands in sequence. Tasmota will reboot
+        # mid-Backlog after Upgrade 1 - that's fine, the OtaUrl was persisted
+        # before reboot so it survives.
+        self._publish_command(dev, "Backlog", f"OtaUrl {ota_url}; Upgrade 1")
+        self.logger.info(
+            f"{dev.name}: upgrade triggered. Device will reboot and reconnect to "
+            "MQTT in ~30-60s. firmwareStatus will refresh on next plugin start."
+        )
+
+    # Menu picker - lists all Tasmota devices with firmware status in the label
+    def pickTasmotaDeviceWithStatus(self, filter="", valuesDict=None, typeId="", targetId=0):
+        devs = sorted(
+            (d for d in indigo.devices.iter("self") if d.pluginId == self.pluginId),
+            key=lambda d: d.name,
+        )
+        out = []
+        for d in devs:
+            status = d.states.get("firmwareStatus", "") or "(not yet checked)"
+            out.append((str(d.id), f"{d.name}   [{status}]"))
+        return out
+
+    def menuUpgradeFirmware(self, valuesDict=None, typeId=None):
+        """Menu callback - resolves the picked device + confirm flag and
+        delegates to actionUpgradeFirmware."""
+        if not valuesDict.get("confirm", False):
+            self.logger.warning(
+                "Upgrade cancelled - tick the 'Yes, upgrade this device now' "
+                "checkbox to confirm"
+            )
+            return False
+        try:
+            devid = int(valuesDict.get("targetDevice", "0"))
+        except (TypeError, ValueError):
+            devid = 0
+        if not devid or devid not in indigo.devices:
+            self.logger.warning("Upgrade: no device selected")
+            return False
+        dev = indigo.devices[devid]
+
+        # Wrap a minimal action-like object for the shared callback
+        class _A: pass
+        a = _A()
+        a.props = {}
+        self.actionUpgradeFirmware(a, dev)
+        return True
+
     def _open_url_locally(self, url):
         """Open a URL in the default browser ON THE INDIGO MAC. For remote
         Indigo clients (Touch / reflector / different Mac) this opens on
@@ -814,10 +932,9 @@ class Plugin(indigo.PluginBase):
         return [(str(d.id), d.name) for d in devs]
 
     def menuOpenDevicePage(self, valuesDict=None, typeId=None):
-        """Menu callback - open one of a device's Tasmota web pages in the
-        default browser on the Indigo Mac. Indigo's device right-click menu
-        is not extensible by plugins, so this is the closest UX to a one-click
-        'open the firmware page for this device' shortcut.
+        """Menu callback - open the chosen device's main Tasmota web page
+        in the default browser on the Indigo Mac. Firmware upgrade has its
+        own dedicated menu, so this only opens the main page.
         """
         try:
             devid = int(valuesDict.get("targetDevice", "0"))
@@ -826,14 +943,12 @@ class Plugin(indigo.PluginBase):
         if not devid or devid not in indigo.devices:
             self.logger.warning("Open device page: no device selected")
             return False
-        dev  = indigo.devices[devid]
-        ip   = dev.pluginProps.get("ip", "")
+        dev = indigo.devices[devid]
+        ip  = dev.pluginProps.get("ip", "")
         if not ip:
             self.logger.warning(f"{dev.name}: no IP recorded; cannot open page")
             return False
-        page = (valuesDict.get("page") or "").strip()
-        url  = f"http://{ip}/{page}" if page else f"http://{ip}/"
-        self._open_url_locally(url)
+        self._open_url_locally(f"http://{ip}/")
         return True
 
     # --------------------------------------------------------
