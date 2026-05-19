@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.2.3
+# Version:     0.3.0
 
 try:
     import indigo
@@ -16,7 +16,6 @@ import json
 import os
 import sys
 import time
-import threading
 from datetime import datetime
 
 sys.path.insert(0, os.getcwd())
@@ -51,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.2.3"
+PLUGIN_VERSION  = "0.3.0"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -74,11 +73,6 @@ OFFLINE_TIMEOUT_SEC = 600
 
 # Folder name for auto-created devices
 DEVICE_FOLDER_NAME = "Tasmota"
-
-# IP scan defaults
-SCAN_HTTP_TIMEOUT = 1.5     # seconds per host
-SCAN_MAX_HOSTS    = 512     # safety ceiling on a single scan call
-SCAN_CONCURRENCY  = 32      # parallel HTTP probes
 
 
 # ============================================================
@@ -749,231 +743,6 @@ class Plugin(indigo.PluginBase):
     def dumpDiscoveryCache(self, valuesDict=None, typeId=None):
         indigo.server.log("=== Tasmota Discovery Cache ===")
         indigo.server.log(json.dumps(self.discovery_cache, indent=2, default=str))
-
-    # --------------------------------------------------------
-    # IP range scan
-    # --------------------------------------------------------
-
-    def _get_local_subnets(self):
-        """Return a sorted list of likely-relevant /24 subnets to scan.
-
-        Combines:
-          - The interface that would route packets out (primary LAN)
-          - Every inet line from `ifconfig` (multi-homed Macs)
-          - The broker's subnet (covers a separate IoT VLAN)
-        Loopback and link-local addresses are excluded.
-        """
-        import socket, subprocess
-        candidates = set()
-
-        # 1. Primary outbound interface via UDP socket trick (no packet sent)
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(0.5)
-            s.connect(("8.8.8.8", 80))
-            ip = s.getsockname()[0]
-            s.close()
-            octets = ip.split(".")
-            if len(octets) == 4:
-                candidates.add(f"{octets[0]}.{octets[1]}.{octets[2]}.0/24")
-        except (OSError, socket.timeout):
-            pass
-
-        # 2. Parse ifconfig for ALL local interfaces (multi-homed Macs)
-        try:
-            out = subprocess.check_output(
-                ["/sbin/ifconfig"], text=True, timeout=2,
-            )
-            for line in out.splitlines():
-                line = line.strip()
-                if not line.startswith("inet ") or "inet6" in line:
-                    continue
-                parts = line.split()
-                ip = parts[1] if len(parts) > 1 else ""
-                if not ip or ip.startswith("127.") or ip.startswith("169.254."):
-                    continue
-                octets = ip.split(".")
-                if len(octets) == 4:
-                    candidates.add(f"{octets[0]}.{octets[1]}.{octets[2]}.0/24")
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
-            pass
-
-        # 3. Broker's subnet (handles broker on a different VLAN to Indigo Mac)
-        if self.mqtt_host:
-            try:
-                broker_ip = socket.gethostbyname(self.mqtt_host)
-                octets = broker_ip.split(".")
-                if len(octets) == 4 and not broker_ip.startswith("127."):
-                    candidates.add(f"{octets[0]}.{octets[1]}.{octets[2]}.0/24")
-            except (socket.gaierror, OSError):
-                pass
-
-        # 4. Subnets of already-discovered Tasmota devices. Crucial when the
-        # Mac is on a main LAN but Tasmotas live on a separate IoT VLAN that
-        # the Mac can route to but isn't directly attached to.
-        for entry in self.discovery_cache.values():
-            cfg = entry.get("config") or {}
-            ip = cfg.get("ip", "")
-            if not ip or ip.startswith("127.") or ip.startswith("169.254."):
-                continue
-            octets = ip.split(".")
-            if len(octets) == 4:
-                candidates.add(f"{octets[0]}.{octets[1]}.{octets[2]}.0/24")
-
-        # Filter out Tailscale CGNAT and other non-LAN ranges - they shouldn't
-        # be scanned (too big, mostly off-LAN). Keep RFC1918 only.
-        def _is_rfc1918(cidr):
-            first = cidr.split(".")[0]
-            second = int(cidr.split(".")[1]) if "." in cidr else 0
-            return (
-                first == "10"
-                or (first == "172" and 16 <= second <= 31)
-                or first == "192"
-            )
-
-        return sorted(c for c in candidates if _is_rfc1918(c))
-
-    def getMenuActionConfigUiValues(self, menu_id):
-        """Pre-populate menu dialogs. For scanNetwork, fill the IP range field
-        with the auto-detected local subnets so the user doesn't have to type."""
-        values_dict = indigo.Dict()
-        errors_dict = indigo.Dict()
-        if menu_id == "scanNetwork":
-            subnets = self._get_local_subnets()
-            if subnets:
-                values_dict["ranges"] = ", ".join(subnets)
-        return (values_dict, errors_dict)
-
-    def _expand_scan_targets(self, ranges_str):
-        """Expand a comma-separated CIDR / IP list into a flat list of IPs."""
-        import ipaddress
-        targets = []
-        for part in (ranges_str or "").split(","):
-            part = part.strip()
-            if not part:
-                continue
-            try:
-                if "/" in part:
-                    net = ipaddress.ip_network(part, strict=False)
-                    targets.extend(str(h) for h in net.hosts())
-                elif "-" in part:
-                    start, end = part.split("-", 1)
-                    start_ip = ipaddress.IPv4Address(start.strip())
-                    end_ip   = ipaddress.IPv4Address(end.strip())
-                    cur = int(start_ip)
-                    while cur <= int(end_ip):
-                        targets.append(str(ipaddress.IPv4Address(cur)))
-                        cur += 1
-                else:
-                    targets.append(str(ipaddress.IPv4Address(part)))
-            except (ValueError, ipaddress.AddressValueError) as exc:
-                self.logger.warning(f"Skipping invalid scan range '{part}': {exc}")
-        # Dedupe while preserving order
-        seen = set()
-        return [ip for ip in targets if not (ip in seen or seen.add(ip))]
-
-    def _probe_one_host(self, ip):
-        """Single-host probe used by the threaded scanner. Returns a tuple or None."""
-        import requests
-        try:
-            resp = requests.get(
-                f"http://{ip}/cm",
-                params={"cmnd": "Status 0"},
-                timeout=SCAN_HTTP_TIMEOUT,
-            )
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            if "Status" not in data or "StatusFWR" not in data:
-                return None   # responded but not a Tasmota device
-            name  = data["Status"].get("DeviceName", "?")
-            topic = data["Status"].get("Topic", "?")
-            mac   = (data["StatusNET"].get("Mac", "") or "").replace(":", "").upper()
-            model = data["StatusFWR"].get("Hardware", "?")
-            fw    = data["StatusFWR"].get("Version", "?")
-            mqtt  = data["StatusMQT"].get("MqttHost", "?")
-            return (ip, mac, name, topic, model, fw, mqtt)
-        except Exception:
-            return None
-
-    def _run_scan_worker(self, targets):
-        """Background-thread worker for the network scan."""
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        self.logger.info(f"Scanning {len(targets)} host(s) for Tasmota devices (concurrency {SCAN_CONCURRENCY})...")
-        found = []
-        with ThreadPoolExecutor(max_workers=SCAN_CONCURRENCY) as pool:
-            futures = {pool.submit(self._probe_one_host, ip): ip for ip in targets}
-            for fut in as_completed(futures):
-                result = fut.result()
-                if result is not None:
-                    found.append(result)
-
-        if not found:
-            self.logger.info("Scan complete - no Tasmota devices found in supplied range(s)")
-            return
-
-        self.logger.info(f"Scan complete - found {len(found)} Tasmota device(s):")
-        known_macs = set(self.discovery_cache.keys())
-        for ip, mac, name, topic, model, fw, mqtt in sorted(found):
-            tag = "[KNOWN]" if mac in known_macs else "[NEW]  "
-            self.logger.info(
-                f"  {tag} {ip:<16} MAC {mac}  '{name}' "
-                f"topic={topic} mqtt={mqtt} fw={fw}"
-            )
-        new_devices = [f for f in found if f[1] not in known_macs]
-        if new_devices:
-            self.logger.info(
-                f"{len(new_devices)} device(s) NOT on our MQTT broker. "
-                "Repoint them via their Tasmota web UI: "
-                f"Configuration -> Configure MQTT -> Host: {self.mqtt_host}"
-            )
-
-    def validateMenuActionConfigUi(self, valuesDict, menuId):
-        """Validate the Scan Network dialog. Without this callback Indigo
-        defaults to marking the form invalid on open."""
-        errors = indigo.Dict()
-        if menuId == "scanNetwork":
-            ranges_str = (valuesDict.get("ranges") or "").strip()
-            if not ranges_str:
-                errors["ranges"] = "Enter at least one IP, range or CIDR"
-                return (False, valuesDict, errors)
-            if not self._expand_scan_targets(ranges_str):
-                errors["ranges"] = "Could not parse any valid IPs from this input"
-                return (False, valuesDict, errors)
-        return (True, valuesDict)
-
-    def scanNetwork(self, valuesDict=None, typeId=None):
-        """Menu callback - spawn a background scan and return immediately.
-
-        Indigo's UI callbacks have a ~30s timeout. A /24 scan can take minutes
-        worst case, so the actual probing must run in a thread.
-        """
-        ranges_str = (valuesDict or {}).get("ranges", "").strip()
-        if not ranges_str:
-            self.logger.warning("No IP ranges supplied for scan")
-            return False
-
-        targets = self._expand_scan_targets(ranges_str)
-        if not targets:
-            self.logger.warning("No valid scan targets parsed")
-            return False
-        if len(targets) > SCAN_MAX_HOSTS:
-            self.logger.warning(
-                f"Scan target count {len(targets)} exceeds safety ceiling {SCAN_MAX_HOSTS} - truncating"
-            )
-            targets = targets[:SCAN_MAX_HOSTS]
-
-        worker = threading.Thread(
-            target=self._run_scan_worker,
-            args=(targets,),
-            daemon=True,
-            name=f"TasmotaScan-{int(time.time())}",
-        )
-        worker.start()
-        self.logger.info(
-            f"Scan started in background ({len(targets)} hosts). Watch the event log for results."
-        )
-        return True
 
     def showPluginInfo(self, valuesDict=None, typeId=None):
         if log_startup_banner:

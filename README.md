@@ -75,6 +75,37 @@ http://<device-ip>/cm?cmnd=SetOption147
 Should return `{"SetOption147":"OFF"}` (off means discovery enabled — naming
 quirk in Tasmota). If `ON`, run `SetOption147 0` to enable discovery.
 
+## Troubleshooting
+
+### A new Tasmota device hasn't appeared in Indigo
+
+1. **Check MQTT is configured on the device.** Open the device's web UI
+   (e.g. `http://192.168.4.144`) → Configuration → Configure MQTT.
+   Confirm Host points at your Mosquitto broker and credentials are correct.
+2. **Check discovery is enabled.** From the device's Console, run
+   `SetOption147` — should return `OFF` (counter-intuitive naming:
+   "OFF" means discovery is **enabled**). If it says `ON`, run
+   `SetOption147 0` to enable discovery.
+3. **Check the broker received it.** From the Indigo Mac:
+   ```
+   mosquitto_sub -h <broker-ip> -u <user> -P <pass> -v -t 'tasmota/discovery/#'
+   ```
+   You should see the device's `config` and `sensors` topics replay
+   immediately (they are retained).
+4. **Force the device to republish discovery.** From its Console:
+   `SetOption147 1; SetOption147 0` (toggle off then on). Or use the
+   plugin's `Plugins → Tasmota Bridge → Discover Tasmota Devices` menu
+   which re-subscribes and pulls retained messages again.
+
+### Factory-default device (never connected to WiFi)
+
+These can't be auto-discovered — they're broadcasting their own AP and
+aren't on your LAN. Onboard them via the device's own captive portal:
+connect your phone or laptop to the device's `tasmota_XXXXXX-1234` SSID,
+open `http://192.168.4.1`, and enter your WiFi credentials **and** your
+MQTT broker details on the same page. After reboot, the device joins
+your LAN and the plugin picks it up automatically.
+
 ## License
 
 MIT
