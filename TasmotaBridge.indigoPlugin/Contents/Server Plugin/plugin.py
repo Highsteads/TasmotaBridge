@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.5.0
+# Version:     0.5.1
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.5.0"
+PLUGIN_VERSION  = "0.5.1"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -935,56 +935,32 @@ class Plugin(indigo.PluginBase):
             except Exception as exc:
                 self.logger.debug(f"Could not write firmwareStatus on {dev.name}: {exc}")
 
-        # ---- Render report ----
-        bar   = "=" * 60
-        title = "Tasmota Firmware Update Check"
-        pad   = (60 - len(title) - 2) // 2
-        mid   = f"{'=' * pad} {title} {'=' * (60 - pad - len(title) - 2)}"
-        L     = indigo.server.log
-
-        L(bar)
-        L(mid)
-        L(bar)
-        L(f"  Latest release on GitHub: {latest_str}")
-        L(f"  Devices checked:          {len(devices)}    "
-          f"({len(up_to_date)} up-to-date, "
-          f"{len(out_of_date)} need updating"
-          + (f", {len(unknown)} unknown" if unknown else "") + ")")
-
+        # ---- Render lean summary ----
+        # Goal: 1-4 lines. Latest version was already announced in the
+        # startup banner, so don't repeat it. Each device gets its
+        # firmwareStatus state set (above) for persistent visibility.
         if out_of_date:
-            L("")
-            L("  Updates available:")
-            max_name = max(len(n) for n, _, _ in out_of_date)
-            for name, cur_str, ip in out_of_date:
-                upgrade_url = f"http://{ip}/up" if ip else "(no IP)"
-                L(f"    {name:<{max_name}}  {cur_str} -> {latest_str}   {upgrade_url}")
-
-        if up_to_date:
-            L("")
-            L("  Up-to-date:")
-            for name, cur_str in up_to_date:
-                L(f"    {name}  ({cur_str})")
+            self.logger.info(
+                f"{len(out_of_date)} Tasmota device{'s' if len(out_of_date) != 1 else ''} "
+                f"{'have' if len(out_of_date) != 1 else 'has'} updates available:"
+            )
+            for name, cur_str, _ in out_of_date:
+                self.logger.info(f"  {name}  ({cur_str} -> {latest_str})")
+            self.logger.info(
+                "Use 'Plugins -> Tasmota Bridge -> Open Tasmota Device Page...' "
+                "to open each device's firmware page."
+            )
+        elif up_to_date and not unknown:
+            self.logger.info(
+                f"All {len(up_to_date)} Tasmota device{'s' if len(up_to_date) != 1 else ''} "
+                f"on latest firmware ({latest_str})."
+            )
 
         if unknown:
-            L("")
-            L("  Unknown / unparseable:")
-            for name, cur_str in unknown:
-                L(f"    {name}  ({cur_str!r})")
-
-        if out_of_date:
-            L("")
-            L("  To upgrade a device:")
-            L("    1. Open the /up page in your browser. Two ways:")
-            L("         a. Right-click the device in Indigo -> Custom Actions ->")
-            L("            'Open Firmware Upgrade Page' (opens browser on the Indigo Mac)")
-            L("         b. Copy the URL above and paste into your own browser")
-            L("    2. In the 'OTA Url' field, paste one of:")
-            L("         http://ota.tasmota.com/tasmota/release/tasmota.bin.gz       (ESP8266/8285)")
-            L("         http://ota.tasmota.com/tasmota32/release/tasmota32.bin.gz   (ESP32)")
-            L("    3. Click 'Start upgrade'. Device reboots, fetches firmware,")
-            L("       and reconnects to MQTT automatically (~30-60s).")
-
-        L(bar)
+            self.logger.info(
+                f"{len(unknown)} Tasmota device(s) with unparseable firmware version - "
+                "check their pluginProps."
+            )
 
     # --------------------------------------------------------
     # Show Plugin Info
