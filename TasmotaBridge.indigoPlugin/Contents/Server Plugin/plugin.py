@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.6.1
+# Version:     0.6.2
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.6.1"
+PLUGIN_VERSION  = "0.6.2"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -766,14 +766,10 @@ class Plugin(indigo.PluginBase):
         return out
 
     def menuUpgradeFirmware(self, valuesDict=None, typeId=None):
-        """Menu callback - resolves the picked device + confirm flag and
-        delegates to actionUpgradeFirmware."""
-        if not valuesDict.get("confirm", False):
-            self.logger.warning(
-                "Upgrade cancelled - tick the 'Yes, upgrade this device now' "
-                "checkbox to confirm"
-            )
-            return False
+        """Menu callback - resolves the picked device and delegates to
+        actionUpgradeFirmware. Picking a device + clicking the Upgrade
+        button is treated as intent, no extra confirm step.
+        """
         try:
             devid = int(valuesDict.get("targetDevice", "0"))
         except (TypeError, ValueError):

@@ -25,9 +25,8 @@
                 <Label>Device:</Label>
                 <List class="self" filter="" method="pickTasmotaDeviceWithStatus" dynamicReload="true"/>
             </Field>
-            <Field id="confirm" type="checkbox" defaultValue="false">
-                <Label>Yes, upgrade this device now:</Label>
-                <Description>The device will reboot during the upgrade and be unavailable for ~30-60 seconds. Plugin auto-detects ESP architecture and uses the matching official Tasmota OTA URL.</Description>
+            <Field id="note" type="label" fontColor="darkgray">
+                <Label>Plugin auto-detects ESP architecture and uses the matching official Tasmota OTA URL. Device reboots and is unavailable for ~30-60 seconds.</Label>
             </Field>
         </ConfigUI>
     </MenuItem>
