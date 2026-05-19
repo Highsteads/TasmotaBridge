@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.7.0
+# Version:     0.7.1
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.0"
+PLUGIN_VERSION  = "0.7.1"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -361,10 +361,14 @@ class Plugin(indigo.PluginBase):
         return [i + 1 for i, v in enumerate(rl) if v]
 
     def _sibling_address(self, base_mac, channel):
-        """Address scheme for multi-relay siblings:
-           channel 1 keeps the bare MAC (primary device);
-           channels 2+ get MAC-N suffix."""
-        return base_mac if channel == 1 else f"{base_mac}-{channel}"
+        """Address scheme:
+           - channel 0 (sensor-only) keeps the bare MAC
+           - channel 1 (primary / single-relay) keeps the bare MAC
+           - channels 2+ get MAC-N suffix to be unique per Indigo device
+        """
+        if channel <= 1:
+            return base_mac
+        return f"{base_mac}-{channel}"
 
     def _sibling_name(self, base_name, channel, total_channels):
         """Naming scheme for sibling devices."""
@@ -545,6 +549,30 @@ class Plugin(indigo.PluginBase):
                 return dev
         return None
 
+    def _bare_mac(self, dev):
+        """Return the bare MAC address with any '-N' sibling suffix stripped.
+        Multi-relay siblings store addresses like 'MAC-2', 'MAC-3'; this gives
+        the physical-device identifier shared across all siblings."""
+        addr = dev.pluginProps.get("address", "") or (dev.address or "")
+        return addr.split("-")[0]
+
+    def _all_siblings_for_topic(self, topic_name):
+        """Return every Indigo device that shares this Tasmota topic
+        (channel-1 plus all multi-relay siblings)."""
+        return [
+            d for d in indigo.devices.iter("self")
+            if d.pluginProps.get("topic") == topic_name
+        ]
+
+    def _all_siblings_for_mac(self, bare_mac):
+        """Return every device whose bare MAC matches the given MAC."""
+        if not bare_mac:
+            return []
+        return [
+            d for d in indigo.devices.iter("self")
+            if self._bare_mac(d) == bare_mac
+        ]
+
     def _find_device_by_topic(self, topic_name):
         """Look up an Indigo device by its Tasmota base topic."""
         for dev in self.devices_by_mac.values():
@@ -560,15 +588,26 @@ class Plugin(indigo.PluginBase):
         return None
 
     def _handle_lwt(self, dev, payload):
+        """LWT messages affect the whole physical device. Update availability
+        on every Indigo sibling that shares the same MQTT topic, and fire
+        the trigger with the bare MAC so user filters match."""
         availability = payload.strip()
-        dev.updateStateOnServer("availability", availability)
-        mac = dev.pluginProps.get("address", "")
-        if mac:
+        topic_name   = dev.pluginProps.get("topic", "")
+        bare_mac     = self._bare_mac(dev)
+
+        siblings = self._all_siblings_for_topic(topic_name) if topic_name else [dev]
+        for sibling in siblings:
+            try:
+                sibling.updateStateOnServer("availability", availability)
+            except Exception as exc:
+                self.logger.debug(f"availability write failed on {sibling.name}: {exc}")
+
+        if bare_mac:
             if availability == "Online":
-                self.last_seen[mac] = time.time()
-                self._fire_event("deviceOnline", mac)
+                self.last_seen[bare_mac] = time.time()
+                self._fire_event("deviceOnline", bare_mac)
             else:
-                self._fire_event("deviceOffline", mac)
+                self._fire_event("deviceOffline", bare_mac)
 
     def _handle_state(self, dev, payload):
         try:
@@ -576,9 +615,9 @@ class Plugin(indigo.PluginBase):
         except json.JSONDecodeError:
             return
 
-        mac = dev.pluginProps.get("address", "")
-        if mac:
-            self.last_seen[mac] = time.time()
+        bare_mac = self._bare_mac(dev)
+        if bare_mac:
+            self.last_seen[bare_mac] = time.time()
 
         # POWER and POWER1..POWERn keys - route each to the matching channel's
         # sibling device. For single-channel devices, the channel-1 sibling
@@ -610,9 +649,9 @@ class Plugin(indigo.PluginBase):
         except json.JSONDecodeError:
             return
 
-        mac = dev.pluginProps.get("address", "")
-        if mac:
-            self.last_seen[mac] = time.time()
+        bare_mac = self._bare_mac(dev)
+        if bare_mac:
+            self.last_seen[bare_mac] = time.time()
 
         energy = data.get("ENERGY")
         if energy and dev.deviceTypeId == "tasmotaEnergyPlug":
@@ -635,22 +674,33 @@ class Plugin(indigo.PluginBase):
         #   "BME280":    {"Temperature": 22.1, "Humidity": 55, "Pressure": 1013}
         #   "AM2301":    {"Temperature": 21.0, "Humidity": 48, "DewPoint": 9.9}
         # We flatten each into camelCase state IDs (bme280Temperature,
-        # bme280Humidity, etc.) and write them via dynamic state declaration.
+        # bme280Humidity, etc.) and use a declare-then-write cycle so the
+        # very first message's values land too.
         skip_top_level = {"Time", "TempUnit", "PressureUnit", "ENERGY"}
-        new_states = []
-        for sensor_name, payload in data.items():
-            if sensor_name in skip_top_level or not isinstance(payload, dict):
+        pending = []      # [(state_id, value), ...]
+        for sensor_name, sub_payload in data.items():
+            if sensor_name in skip_top_level or not isinstance(sub_payload, dict):
                 continue
-            for field_name, val in payload.items():
-                # Skip identifier-only fields
+            for field_name, val in sub_payload.items():
                 if field_name in ("Id", "Type"):
                     continue
                 state_id = sensor_state_id(sensor_name, field_name)
                 if not state_id:
                     continue
-                self._capture_dynamic_state(dev, state_id, val, new_states)
-        if new_states:
-            self._refresh_state_list_for_new_states(dev, new_states)
+                pending.append((state_id, val))
+
+        # Declare-before-write: find unknown state IDs, register them via
+        # stateListOrDisplayStateIdChanged, re-fetch device, then write.
+        # Without this, the first message that introduces a state would lose
+        # its values (write fails with 'state not defined', we'd then declare
+        # but never retry the write).
+        unknown = [sid for sid, _ in pending if sid not in dev.states]
+        if unknown:
+            self._refresh_state_list_for_new_states(dev, unknown)
+            dev = indigo.devices[dev.id]   # re-fetch with updated state list
+
+        for state_id, val in pending:
+            self._capture_dynamic_state(dev, state_id, val, [])
 
     def _handle_result(self, dev, data):
         """Parse a stat/<topic>/RESULT JSON payload.
@@ -707,23 +757,31 @@ class Plugin(indigo.PluginBase):
                         pass
 
     def _fire_button_event(self, dev, button_num, action):
-        """Update device button states and fire buttonPressed triggers."""
-        # Increment press count so triggers fire on repeated identical presses
-        try:
-            count = int(dev.states.get("pressCount", 0) or 0) + 1
-        except (TypeError, ValueError):
-            count = 1
-        dev.updateStatesOnServer([
-            {"key": "lastButton",  "value": button_num},
-            {"key": "lastAction",  "value": action},
-            {"key": "pressCount",  "value": count},
-        ])
+        """Update device button states and fire buttonPressed triggers.
+
+        State writes (lastButton, lastAction, pressCount) only apply to
+        tasmotaButton-type devices. For devices that have buttons in addition
+        to a primary relay (e.g. Sonoff Basic), we skip the state writes
+        since those states aren't declared, but still fire the trigger so
+        user automation works.
+        """
+        if dev.deviceTypeId == "tasmotaButton":
+            try:
+                count = int(dev.states.get("pressCount", 0) or 0) + 1
+            except (TypeError, ValueError):
+                count = 1
+            try:
+                dev.updateStatesOnServer([
+                    {"key": "lastButton",  "value": button_num},
+                    {"key": "lastAction",  "value": action},
+                    {"key": "pressCount",  "value": count},
+                ])
+            except Exception as exc:
+                self.logger.debug(f"Button state write on {dev.name} failed: {exc}")
         self.logger.debug(f"{dev.name}: Button{button_num} {action}")
 
-        # Fire matching triggers
-        mac = dev.pluginProps.get("address", "")
-        # Strip any "-N" sibling suffix to get the bare MAC for matching
-        bare_mac = mac.split("-")[0]
+        # Fire matching triggers regardless of device type
+        bare_mac = self._bare_mac(dev)
         for trigger in self.event_triggers.values():
             if trigger.pluginTypeId != "buttonPressed":
                 continue
@@ -1026,10 +1084,15 @@ class Plugin(indigo.PluginBase):
             "MQTT in ~30-60s. firmwareStatus will refresh on next plugin start."
         )
 
-    # Menu picker - lists all Tasmota devices with firmware status in the label
+    # Menu picker - lists all Tasmota devices with firmware status in the label.
+    # Multi-relay devices: only the channel-1 (primary) sibling is listed,
+    # since firmware is per-physical-device, not per-channel. Picking ch 1
+    # upgrades the device as a whole.
     def pickTasmotaDeviceWithStatus(self, filter="", valuesDict=None, typeId="", targetId=0):
         devs = sorted(
-            (d for d in indigo.devices.iter("self") if d.pluginId == self.pluginId),
+            (d for d in indigo.devices.iter("self")
+             if d.pluginId == self.pluginId
+             and "-" not in (d.pluginProps.get("address") or d.address or "")),
             key=lambda d: d.name,
         )
         out = []
@@ -1124,13 +1187,17 @@ class Plugin(indigo.PluginBase):
                     elif elapsed >= 60:
                         self.initial_firmware_check_done = True   # skip
 
-                # LWT timeout watcher
-                for mac, ts in list(self.last_seen.items()):
+                # LWT timeout watcher - mark all siblings offline together
+                for bare_mac, ts in list(self.last_seen.items()):
                     if now - ts > OFFLINE_TIMEOUT_SEC:
-                        dev = self.devices_by_mac.get(mac)
-                        if dev and dev.states.get("availability") != "Offline":
-                            dev.updateStateOnServer("availability", "Offline")
-                            self._fire_event("deviceOffline", mac)
+                        siblings = self._all_siblings_for_mac(bare_mac)
+                        changed = False
+                        for dev in siblings:
+                            if dev.states.get("availability") != "Offline":
+                                dev.updateStateOnServer("availability", "Offline")
+                                changed = True
+                        if changed:
+                            self._fire_event("deviceOffline", bare_mac)
                 self.sleep(30)
         except self.StopThread:
             pass
