@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tasmota Bridge Plugin - Devices.xml -->
+<!-- Device types auto-detected from tasmota/discovery/<MAC>/config payload:           -->
+<!--   tasmotaRelay        : relay   - single-channel relay (rl[0]=1, no sensors)       -->
+<!--   tasmotaEnergyPlug   : relay   - relay + ENERGY sensor (Sonoff POW, Athom etc.)   -->
+<!--   tasmotaLight        : dimmer  - lt_st>=1 (dimmer, CT, RGB, RGBW, RGBCW)          -->
+<!--   tasmotaSensor       : sensor  - sensors only, no relay (DS18B20, BME280 etc.)    -->
+<!--   tasmotaShutter      : dimmer  - shutter slots present (sht[])                    -->
+<!--   tasmotaIRBridge     : custom  - IR transceiver bridge                            -->
+<Devices>
+
+    <!-- ================================================================
+         tasmotaRelay - single-channel Tasmota relay/switch/plug
+         Native states: onOffState
+         ================================================================ -->
+    <Device type="relay" id="tasmotaRelay">
+        <Name>Tasmota Relay</Name>
+        <ConfigUI>
+            <Field id="address" type="textfield" defaultValue="">
+                <Label>MAC Address:</Label>
+                <Description>12-char uppercase MAC, no separators (e.g. 2462AB6CDC64)</Description>
+            </Field>
+            <Field id="topic" type="textfield" defaultValue="">
+                <Label>MQTT Topic:</Label>
+                <Description>Tasmota base topic (e.g. tasmota_6CDC64)</Description>
+            </Field>
+            <Field id="channel" type="textfield" defaultValue="1">
+                <Label>Relay Channel:</Label>
+                <Description>1-8 for multi-relay devices, 1 for single-relay</Description>
+            </Field>
+            <Field id="ip" type="textfield" defaultValue="">
+                <Label>IP Address:</Label>
+                <Description>Optional - enables HTTP control fallback</Description>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="firmware" type="textfield" readonly="true" defaultValue="">
+                <Label>Firmware:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="rssi">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
+                <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+            <State id="signal">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi Signal Changed</TriggerLabel>
+                <ControlPageLabel>WiFi Signal dBm</ControlPageLabel>
+            </State>
+            <State id="uptime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Uptime Changed</TriggerLabel>
+                <ControlPageLabel>Uptime</ControlPageLabel>
+            </State>
+            <State id="lastSeen">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Seen Changed</TriggerLabel>
+                <ControlPageLabel>Last Seen</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         tasmotaEnergyPlug - relay + energy monitoring (Sonoff POW, Athom, etc.)
+         Native states: onOffState
+         Energy states use Indigo's standard energy device pattern
+         ================================================================ -->
+    <Device type="relay" id="tasmotaEnergyPlug" subType="kEnergyMeter">
+        <Name>Tasmota Energy Plug</Name>
+        <ConfigUI>
+            <Field id="address" type="textfield" defaultValue="">
+                <Label>MAC Address:</Label>
+                <Description>12-char uppercase MAC, no separators</Description>
+            </Field>
+            <Field id="topic" type="textfield" defaultValue="">
+                <Label>MQTT Topic:</Label>
+            </Field>
+            <Field id="channel" type="textfield" defaultValue="1">
+                <Label>Relay Channel:</Label>
+            </Field>
+            <Field id="ip" type="textfield" defaultValue="">
+                <Label>IP Address:</Label>
+                <Description>Optional - HTTP control fallback</Description>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="firmware" type="textfield" readonly="true" defaultValue="">
+                <Label>Firmware:</Label>
+            </Field>
+            <Field id="SupportsEnergyMeter" type="checkbox" hidden="true" defaultValue="true"/>
+            <Field id="SupportsEnergyMeterCurPower" type="checkbox" hidden="true" defaultValue="true"/>
+        </ConfigUI>
+        <States>
+            <!-- Indigo natively shows curEnergyLevel + accumEnergyTotal on energy devices.
+                 Plugin writes via dev.updateStatesOnServer with the standard keys.       -->
+            <State id="voltage">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>Voltage Changed</TriggerLabel>
+                <ControlPageLabel>Voltage V</ControlPageLabel>
+            </State>
+            <State id="current">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>Current Changed</TriggerLabel>
+                <ControlPageLabel>Current A</ControlPageLabel>
+            </State>
+            <State id="apparentPower">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>Apparent Power Changed</TriggerLabel>
+                <ControlPageLabel>Apparent Power VA</ControlPageLabel>
+            </State>
+            <State id="reactivePower">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>Reactive Power Changed</TriggerLabel>
+                <ControlPageLabel>Reactive Power VAR</ControlPageLabel>
+            </State>
+            <State id="powerFactor">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>Power Factor Changed</TriggerLabel>
+                <ControlPageLabel>Power Factor</ControlPageLabel>
+            </State>
+            <State id="energyToday">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>Today kWh Changed</TriggerLabel>
+                <ControlPageLabel>Today kWh</ControlPageLabel>
+            </State>
+            <State id="energyYesterday">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>Yesterday kWh Changed</TriggerLabel>
+                <ControlPageLabel>Yesterday kWh</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="rssi">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
+                <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+            <State id="signal">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi Signal Changed</TriggerLabel>
+                <ControlPageLabel>WiFi Signal dBm</ControlPageLabel>
+            </State>
+            <State id="uptime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Uptime Changed</TriggerLabel>
+                <ControlPageLabel>Uptime</ControlPageLabel>
+            </State>
+            <State id="lastSeen">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Seen Changed</TriggerLabel>
+                <ControlPageLabel>Last Seen</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         tasmotaLight - Tasmota dimmable/CT/RGB light (lt_st >= 1)
+         Native states: onOffState, brightnessLevel
+         Optional native: SupportsColor / SupportsWhiteTemperature via ConfigUI flags
+         ================================================================ -->
+    <Device type="dimmer" id="tasmotaLight">
+        <Name>Tasmota Light</Name>
+        <ConfigUI>
+            <Field id="address" type="textfield" defaultValue="">
+                <Label>MAC Address:</Label>
+            </Field>
+            <Field id="topic" type="textfield" defaultValue="">
+                <Label>MQTT Topic:</Label>
+            </Field>
+            <Field id="ip" type="textfield" defaultValue="">
+                <Label>IP Address:</Label>
+            </Field>
+            <Field id="lightSubtype" type="textfield" readonly="true" defaultValue="">
+                <Label>Light Subtype:</Label>
+                <Description>1=dimmer, 2=CT, 3=RGB, 4=RGBW, 5=RGBCW</Description>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="SupportsColor" type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="SupportsRGB" type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="SupportsWhite" type="checkbox" hidden="true" defaultValue="false"/>
+            <Field id="SupportsWhiteTemperature" type="checkbox" hidden="true" defaultValue="false"/>
+        </ConfigUI>
+        <States>
+            <State id="colorMode">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Color Mode Changed</TriggerLabel>
+                <ControlPageLabel>Color Mode</ControlPageLabel>
+            </State>
+            <State id="colorTemp">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>Color Temp Changed</TriggerLabel>
+                <ControlPageLabel>Color Temp Mired</ControlPageLabel>
+            </State>
+            <State id="hsbColor">
+                <ValueType>String</ValueType>
+                <TriggerLabel>HSB Color Changed</TriggerLabel>
+                <ControlPageLabel>HSB Color</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="rssi">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
+                <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         tasmotaSensor - sensor-only device (no relay)
+         Generic - dynamic state declaration captures all payload fields
+         ================================================================ -->
+    <Device type="sensor" id="tasmotaSensor">
+        <Name>Tasmota Sensor</Name>
+        <ConfigUI>
+            <Field id="address" type="textfield" defaultValue="">
+                <Label>MAC Address:</Label>
+            </Field>
+            <Field id="topic" type="textfield" defaultValue="">
+                <Label>MQTT Topic:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+            <Field id="sensorTypes" type="textfield" readonly="true" defaultValue="">
+                <Label>Sensors:</Label>
+                <Description>Detected sensor types (DS18B20, BME280, etc.)</Description>
+            </Field>
+            <Field id="seenDynamicKeys" type="textfield" hidden="true" defaultValue=""/>
+        </ConfigUI>
+        <States>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="rssi">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
+                <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+            <State id="lastSeen">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Seen Changed</TriggerLabel>
+                <ControlPageLabel>Last Seen</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+    <!-- ================================================================
+         tasmotaShutter - Tasmota shutter (sht[] slot present)
+         Modeled as dimmer where 0% = closed, 100% = open
+         ================================================================ -->
+    <Device type="dimmer" id="tasmotaShutter">
+        <Name>Tasmota Shutter</Name>
+        <ConfigUI>
+            <Field id="address" type="textfield" defaultValue="">
+                <Label>MAC Address:</Label>
+            </Field>
+            <Field id="topic" type="textfield" defaultValue="">
+                <Label>MQTT Topic:</Label>
+            </Field>
+            <Field id="shutterIndex" type="textfield" defaultValue="1">
+                <Label>Shutter Index:</Label>
+                <Description>1-4 for multi-shutter devices</Description>
+            </Field>
+            <Field id="ip" type="textfield" defaultValue="">
+                <Label>IP Address:</Label>
+            </Field>
+            <Field id="model" type="textfield" readonly="true" defaultValue="">
+                <Label>Model:</Label>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="direction">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Direction Changed</TriggerLabel>
+                <ControlPageLabel>Direction</ControlPageLabel>
+            </State>
+            <State id="availability">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Availability Changed</TriggerLabel>
+                <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
+</Devices>

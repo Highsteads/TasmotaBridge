@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MenuItems>
+
+    <MenuItem id="discoverDevices">
+        <Name>Discover Tasmota Devices</Name>
+        <CallbackMethod>discoverDevices</CallbackMethod>
+    </MenuItem>
+
+    <MenuItem id="listSeenDevices">
+        <Name>List Seen Devices</Name>
+        <CallbackMethod>listSeenDevices</CallbackMethod>
+    </MenuItem>
+
+    <MenuItem id="dumpDiscoveryCache">
+        <Name>Dump Discovery Cache to Log</Name>
+        <CallbackMethod>dumpDiscoveryCache</CallbackMethod>
+    </MenuItem>
+
+    <MenuItem id="sep1" isSeparator="true"/>
+
+    <MenuItem id="showPluginInfo">
+        <Name>Show Plugin Info</Name>
+        <CallbackMethod>showPluginInfo</CallbackMethod>
+    </MenuItem>
+
+</MenuItems>

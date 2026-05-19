@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Events>
+
+    <Event id="deviceOnline">
+        <Name>Tasmota Device Came Online</Name>
+        <ConfigUI>
+            <Field id="targetAddress" type="textfield" defaultValue="">
+                <Label>MAC Address (blank = any device):</Label>
+            </Field>
+        </ConfigUI>
+    </Event>
+
+    <Event id="deviceOffline">
+        <Name>Tasmota Device Went Offline</Name>
+        <ConfigUI>
+            <Field id="targetAddress" type="textfield" defaultValue="">
+                <Label>MAC Address (blank = any device):</Label>
+            </Field>
+        </ConfigUI>
+    </Event>
+
+    <Event id="newDeviceDiscovered">
+        <Name>New Tasmota Device Discovered</Name>
+        <ConfigUI>
+            <Field id="info" type="label">
+                <Label>Fires whenever a previously-unseen MAC publishes a discovery config payload.</Label>
+            </Field>
+        </ConfigUI>
+    </Event>
+
+</Events>

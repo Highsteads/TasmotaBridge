@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Actions>
+
+    <Action id="sendRawCommand" deviceFilter="self">
+        <Name>Send Raw Tasmota Command</Name>
+        <CallbackMethod>actionSendRawCommand</CallbackMethod>
+        <ConfigUI>
+            <Field id="command" type="textfield" defaultValue="">
+                <Label>Command:</Label>
+                <Description>Tasmota command without prefix, e.g. "Power TOGGLE", "Dimmer 50", "Backlog Power ON; Delay 100; Dimmer 75"</Description>
+            </Field>
+        </ConfigUI>
+    </Action>
+
+    <Action id="setHSBColor" deviceFilter="self.tasmotaLight">
+        <Name>Set HSB Color</Name>
+        <CallbackMethod>actionSetHSBColor</CallbackMethod>
+        <ConfigUI>
+            <Field id="hue" type="textfield" defaultValue="0">
+                <Label>Hue (0-360):</Label>
+            </Field>
+            <Field id="saturation" type="textfield" defaultValue="100">
+                <Label>Saturation (0-100):</Label>
+            </Field>
+            <Field id="brightness" type="textfield" defaultValue="100">
+                <Label>Brightness (0-100):</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
+
+    <Action id="setColorTemp" deviceFilter="self.tasmotaLight">
+        <Name>Set Colour Temperature</Name>
+        <CallbackMethod>actionSetColorTemp</CallbackMethod>
+        <ConfigUI>
+            <Field id="mired" type="textfield" defaultValue="300">
+                <Label>Mireds (153-500):</Label>
+                <Description>153 = cool (~6500K), 500 = warm (~2000K)</Description>
+            </Field>
+        </ConfigUI>
+    </Action>
+
+    <Action id="shutterOpen" deviceFilter="self.tasmotaShutter">
+        <Name>Open Shutter</Name>
+        <CallbackMethod>actionShutterOpen</CallbackMethod>
+    </Action>
+
+    <Action id="shutterClose" deviceFilter="self.tasmotaShutter">
+        <Name>Close Shutter</Name>
+        <CallbackMethod>actionShutterClose</CallbackMethod>
+    </Action>
+
+    <Action id="shutterStop" deviceFilter="self.tasmotaShutter">
+        <Name>Stop Shutter</Name>
+        <CallbackMethod>actionShutterStop</CallbackMethod>
+    </Action>
+
+    <Action id="requestStatus" deviceFilter="self">
+        <Name>Request Status Update</Name>
+        <CallbackMethod>actionRequestStatus</CallbackMethod>
+    </Action>
+
+</Actions>

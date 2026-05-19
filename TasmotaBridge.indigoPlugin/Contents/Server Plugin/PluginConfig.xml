@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PluginConfig>
+
+    <Field id="credentialsHeader" type="label">
+        <Label>MQTT Broker Settings</Label>
+    </Field>
+
+    <Field id="credentialsNote" type="label" alignText="left">
+        <Label>If IndigoSecrets.py exists at /Library/Application Support/Perceptive Automation/ and contains MQTT_BROKER / MQTT_PORT / MQTT_USERNAME / MQTT_PASSWORD, those take precedence over the values below. Use this section if you do not have IndigoSecrets.py.</Label>
+    </Field>
+
+    <Field id="mqttHost" type="textfield" defaultValue="">
+        <Label>Broker Host:</Label>
+        <Description>IP or hostname of Mosquitto broker (leave blank to use IndigoSecrets.py)</Description>
+    </Field>
+
+    <Field id="mqttPort" type="textfield" defaultValue="1883">
+        <Label>Broker Port:</Label>
+    </Field>
+
+    <Field id="mqttUsername" type="textfield" defaultValue="">
+        <Label>Username:</Label>
+    </Field>
+
+    <Field id="mqttPassword" type="textfield" secure="true" defaultValue="">
+        <Label>Password:</Label>
+    </Field>
+
+    <Field id="mqttTLS" type="checkbox" defaultValue="false">
+        <Label>Use TLS:</Label>
+        <Description>Enable for brokers using TLS (typically port 8883)</Description>
+    </Field>
+
+    <Field id="sep1" type="separator"/>
+
+    <Field id="discoveryHeader" type="label">
+        <Label>Device Discovery</Label>
+    </Field>
+
+    <Field id="autoCreateDevices" type="checkbox" defaultValue="true">
+        <Label>Auto-create Indigo devices on discovery:</Label>
+        <Description>When a new Tasmota device is discovered, automatically create the matching Indigo device. Uncheck to discover-but-not-create (then add manually).</Description>
+    </Field>
+
+    <Field id="forceHADiscoveryOnPair" type="checkbox" defaultValue="false">
+        <Label>Force-enable Tasmota discovery on each device:</Label>
+        <Description>If a discovered device has SetOption147 enabled (discovery disabled), the plugin will issue SetOption147 0 to enable it. Off by default - respect device's existing config.</Description>
+    </Field>
+
+    <Field id="sep2" type="separator"/>
+
+    <Field id="loggingHeader" type="label">
+        <Label>Logging</Label>
+    </Field>
+
+    <Field id="logLevel" type="menu" defaultValue="INFO">
+        <Label>Log Level:</Label>
+        <List>
+            <Option value="DEBUG">Debug (verbose)</Option>
+            <Option value="INFO">Info</Option>
+            <Option value="WARNING">Warning only</Option>
+            <Option value="ERROR">Error only</Option>
+        </List>
+    </Field>
+
+    <Field id="logRawPayloads" type="checkbox" defaultValue="false">
+        <Label>Log raw MQTT payloads (debug):</Label>
+        <Description>Useful when adding support for new device types. Off in production.</Description>
+    </Field>
+
+</PluginConfig>
