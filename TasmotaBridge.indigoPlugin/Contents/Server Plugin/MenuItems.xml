@@ -19,13 +19,11 @@
     <MenuItem id="scanNetwork">
         <Name>Scan Network for Tasmota Devices...</Name>
         <CallbackMethod>scanNetwork</CallbackMethod>
+        <ButtonTitle>Scan</ButtonTitle>
         <ConfigUI>
-            <Field id="info" type="label" alignText="left">
-                <Label>HTTP-probes each IP for a Tasmota device (Status 0). Useful for finding devices that aren't yet pointed at this MQTT broker.</Label>
-            </Field>
-            <Field id="ranges" type="textfield" defaultValue="192.168.1.0/24">
+            <Field id="ranges" type="textfield" defaultValue="">
                 <Label>IP Range:</Label>
-                <Description>CIDR like 192.168.4.0/24, a range like 192.168.4.100-192.168.4.200, a single IP, or comma-separated mixtures of any. Max 512 hosts per scan.</Description>
+                <Description>Pre-filled with this Mac's local subnets + the broker's subnet. Edit if needed. Supports CIDR (192.168.4.0/24), range (192.168.4.100-200), single IP, or comma-separated mix. Max 512 hosts.</Description>
             </Field>
         </ConfigUI>
     </MenuItem>
