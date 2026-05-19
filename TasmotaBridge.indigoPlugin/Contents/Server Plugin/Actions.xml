@@ -59,4 +59,14 @@
         <CallbackMethod>actionRequestStatus</CallbackMethod>
     </Action>
 
+    <Action id="openWebUI" deviceFilter="self">
+        <Name>Open Tasmota Web UI</Name>
+        <CallbackMethod>actionOpenWebUI</CallbackMethod>
+    </Action>
+
+    <Action id="openFirmwarePage" deviceFilter="self">
+        <Name>Open Firmware Upgrade Page</Name>
+        <CallbackMethod>actionOpenFirmwarePage</CallbackMethod>
+    </Action>
+
 </Actions>

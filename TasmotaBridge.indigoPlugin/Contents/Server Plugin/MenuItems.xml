@@ -16,9 +16,29 @@
         <CallbackMethod>dumpDiscoveryCache</CallbackMethod>
     </MenuItem>
 
-    <MenuItem id="checkFirmwareUpdates">
-        <Name>Check Firmware Updates</Name>
-        <CallbackMethod>checkFirmwareUpdates</CallbackMethod>
+    <MenuItem id="openDevicePage">
+        <Name>Open Tasmota Device Page...</Name>
+        <CallbackMethod>menuOpenDevicePage</CallbackMethod>
+        <ButtonTitle>Open</ButtonTitle>
+        <ConfigUI>
+            <Field id="targetDevice" type="menu">
+                <Label>Device:</Label>
+                <List class="self" filter="" method="pickTasmotaDevice" dynamicReload="true"/>
+            </Field>
+            <Field id="page" type="menu" defaultValue="up">
+                <Label>Page:</Label>
+                <List>
+                    <Option value="">Main Page (/)</Option>
+                    <Option value="up">Firmware Upgrade (/up)</Option>
+                    <Option value="cs">Configure Other (/cs)</Option>
+                    <Option value="cn">Console (/cn)</Option>
+                    <Option value="in">Information (/in)</Option>
+                </List>
+            </Field>
+            <Field id="note" type="label" fontColor="darkgray">
+                <Label>Opens in the default browser on the Indigo Mac, not on a remote Indigo client.</Label>
+            </Field>
+        </ConfigUI>
     </MenuItem>
 
     <MenuItem id="sep1" isSeparator="true"/>

@@ -65,6 +65,11 @@
                 <TriggerLabel>Last Seen Changed</TriggerLabel>
                 <ControlPageLabel>Last Seen</ControlPageLabel>
             </State>
+            <State id="firmwareStatus">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Status Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -162,6 +167,11 @@
                 <TriggerLabel>Last Seen Changed</TriggerLabel>
                 <ControlPageLabel>Last Seen</ControlPageLabel>
             </State>
+            <State id="firmwareStatus">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Status Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -220,6 +230,11 @@
                 <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
                 <ControlPageLabel>WiFi RSSI</ControlPageLabel>
             </State>
+            <State id="firmwareStatus">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Status Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -261,6 +276,11 @@
                 <TriggerLabel>Last Seen Changed</TriggerLabel>
                 <ControlPageLabel>Last Seen</ControlPageLabel>
             </State>
+            <State id="firmwareStatus">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Status Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Status</ControlPageLabel>
+            </State>
         </States>
     </Device>
 
@@ -298,6 +318,11 @@
                 <ValueType>String</ValueType>
                 <TriggerLabel>Availability Changed</TriggerLabel>
                 <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="firmwareStatus">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Firmware Status Changed</TriggerLabel>
+                <ControlPageLabel>Firmware Status</ControlPageLabel>
             </State>
         </States>
     </Device>

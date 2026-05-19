@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.4.2
+# Version:     0.5.0
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.4.2"
+PLUGIN_VERSION  = "0.5.0"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -672,6 +672,32 @@ class Plugin(indigo.PluginBase):
     def actionRequestStatus(self, action, dev):
         self._publish_command(dev, "Status", "0")
 
+    def _open_url_locally(self, url):
+        """Open a URL in the default browser ON THE INDIGO MAC. For remote
+        Indigo clients (Touch / reflector / different Mac) this opens on
+        the server, not on the user's screen - in that case they should
+        copy the URL from the log instead."""
+        import webbrowser
+        try:
+            webbrowser.open(url, new=2)
+            self.logger.info(f"Opened {url} in default browser on the Indigo Mac")
+        except Exception as exc:
+            self.logger.warning(f"Could not open {url}: {exc}")
+
+    def actionOpenWebUI(self, action, dev):
+        ip = dev.pluginProps.get("ip", "")
+        if not ip:
+            self.logger.warning(f"{dev.name}: no IP recorded; cannot open web UI")
+            return
+        self._open_url_locally(f"http://{ip}/")
+
+    def actionOpenFirmwarePage(self, action, dev):
+        ip = dev.pluginProps.get("ip", "")
+        if not ip:
+            self.logger.warning(f"{dev.name}: no IP recorded; cannot open firmware page")
+            return
+        self._open_url_locally(f"http://{ip}/up")
+
     # --------------------------------------------------------
     # Trigger lifecycle (for custom Events.xml events)
     # --------------------------------------------------------
@@ -776,6 +802,41 @@ class Plugin(indigo.PluginBase):
         indigo.server.log(json.dumps(self.discovery_cache, indent=2, default=str))
 
     # --------------------------------------------------------
+    # Open Device Page (Plugins menu, device picker)
+    # --------------------------------------------------------
+
+    def pickTasmotaDevice(self, filter="", valuesDict=None, typeId="", targetId=0):
+        """List-method callback - dropdown source for the device picker."""
+        devs = sorted(
+            (d for d in indigo.devices.iter("self") if d.pluginId == self.pluginId),
+            key=lambda d: d.name,
+        )
+        return [(str(d.id), d.name) for d in devs]
+
+    def menuOpenDevicePage(self, valuesDict=None, typeId=None):
+        """Menu callback - open one of a device's Tasmota web pages in the
+        default browser on the Indigo Mac. Indigo's device right-click menu
+        is not extensible by plugins, so this is the closest UX to a one-click
+        'open the firmware page for this device' shortcut.
+        """
+        try:
+            devid = int(valuesDict.get("targetDevice", "0"))
+        except (TypeError, ValueError):
+            devid = 0
+        if not devid or devid not in indigo.devices:
+            self.logger.warning("Open device page: no device selected")
+            return False
+        dev  = indigo.devices[devid]
+        ip   = dev.pluginProps.get("ip", "")
+        if not ip:
+            self.logger.warning(f"{dev.name}: no IP recorded; cannot open page")
+            return False
+        page = (valuesDict.get("page") or "").strip()
+        url  = f"http://{ip}/{page}" if page else f"http://{ip}/"
+        self._open_url_locally(url)
+        return True
+
+    # --------------------------------------------------------
     # Firmware update check
     # --------------------------------------------------------
 
@@ -851,7 +912,8 @@ class Plugin(indigo.PluginBase):
             indigo.server.log("Tasmota Firmware Check: no Tasmota devices in Indigo yet")
             return
 
-        # Bucket each device by status
+        # Bucket each device by status AND write the persistent firmwareStatus
+        # state so it shows in the device's Custom States panel.
         up_to_date  = []
         out_of_date = []
         unknown     = []
@@ -861,10 +923,17 @@ class Plugin(indigo.PluginBase):
             cur     = self._parse_version(cur_str)
             if not cur or not latest:
                 unknown.append((dev.name, cur_str))
+                status = "unknown"
             elif cur >= latest:
                 up_to_date.append((dev.name, cur_str))
+                status = "up-to-date"
             else:
                 out_of_date.append((dev.name, cur_str, ip))
+                status = f"update available: {latest_str}"
+            try:
+                dev.updateStateOnServer("firmwareStatus", status)
+            except Exception as exc:
+                self.logger.debug(f"Could not write firmwareStatus on {dev.name}: {exc}")
 
         # ---- Render report ----
         bar   = "=" * 60
@@ -905,7 +974,10 @@ class Plugin(indigo.PluginBase):
         if out_of_date:
             L("")
             L("  To upgrade a device:")
-            L("    1. Click the device's URL above (opens the /up page)")
+            L("    1. Open the /up page in your browser. Two ways:")
+            L("         a. Right-click the device in Indigo -> Custom Actions ->")
+            L("            'Open Firmware Upgrade Page' (opens browser on the Indigo Mac)")
+            L("         b. Copy the URL above and paste into your own browser")
             L("    2. In the 'OTA Url' field, paste one of:")
             L("         http://ota.tasmota.com/tasmota/release/tasmota.bin.gz       (ESP8266/8285)")
             L("         http://ota.tasmota.com/tasmota32/release/tasmota32.bin.gz   (ESP32)")
