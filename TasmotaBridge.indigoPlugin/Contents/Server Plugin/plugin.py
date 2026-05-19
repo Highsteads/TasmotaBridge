@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.3.0
+# Version:     0.4.2
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.3.0"
+PLUGIN_VERSION  = "0.4.2"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -140,11 +140,25 @@ class Plugin(indigo.PluginBase):
 
         self.auto_create   = bool(pluginPrefs.get("autoCreateDevices", True))
 
+        # GitHub release cache for firmware update checks - {"tag": "15.0.1", "ts": epoch}
+        self.gh_release_cache = {"tag": None, "ts": 0}
+
+        # One-shot firmware check after devices are discovered (set in startup())
+        self.initial_firmware_check_done = False
+        self.startup_time = 0.0
+
+        # Synchronous fetch of latest Tasmota release for the banner. Short
+        # timeout so unreachable GitHub doesn't delay plugin startup.
+        latest_tasmota = self._fetch_tasmota_latest(timeout=5)
+        if latest_tasmota:
+            self.gh_release_cache = {"tag": latest_tasmota, "ts": time.time()}
+
         if log_startup_banner:
             log_startup_banner(pluginId, pluginDisplayName, pluginVersion, extras=[
-                ("MQTT Broker:", f"{self.mqtt_host}:{self.mqtt_port}"),
-                ("MQTT User:", self.mqtt_username or "(anonymous)"),
-                ("Auto-create:", "yes" if self.auto_create else "no"),
+                ("MQTT Broker:",      f"{self.mqtt_host}:{self.mqtt_port}"),
+                ("MQTT User:",        self.mqtt_username or "(anonymous)"),
+                ("Auto-create:",      "yes" if self.auto_create else "no"),
+                ("Latest Tasmota:",   latest_tasmota or "(GitHub unreachable)"),
             ])
         else:
             indigo.server.log(f"{pluginDisplayName} v{pluginVersion} starting")
@@ -160,6 +174,7 @@ class Plugin(indigo.PluginBase):
                 "or fill Broker Host in Plugins -> Tasmota Bridge -> Configure..."
             )
             return
+        self.startup_time = time.time()
         self._mqtt_connect()
 
     def shutdown(self):
@@ -684,6 +699,19 @@ class Plugin(indigo.PluginBase):
         try:
             while True:
                 now = time.time()
+
+                # One-shot firmware check ~15s after startup, once devices
+                # have appeared via MQTT discovery. Gives up at 60s if no
+                # devices appear (e.g. fresh install with nothing yet on MQTT).
+                if not self.initial_firmware_check_done and self.startup_time:
+                    elapsed = now - self.startup_time
+                    if elapsed >= 15 and self.devices_by_mac:
+                        self.checkFirmwareUpdates()
+                        self.initial_firmware_check_done = True
+                    elif elapsed >= 60:
+                        self.initial_firmware_check_done = True   # skip
+
+                # LWT timeout watcher
                 for mac, ts in list(self.last_seen.items()):
                     if now - ts > OFFLINE_TIMEOUT_SEC:
                         dev = self.devices_by_mac.get(mac)
@@ -746,6 +774,149 @@ class Plugin(indigo.PluginBase):
     def dumpDiscoveryCache(self, valuesDict=None, typeId=None):
         indigo.server.log("=== Tasmota Discovery Cache ===")
         indigo.server.log(json.dumps(self.discovery_cache, indent=2, default=str))
+
+    # --------------------------------------------------------
+    # Firmware update check
+    # --------------------------------------------------------
+
+    def _parse_version(self, s):
+        """Parse a Tasmota version string into a tuple of ints for comparison.
+
+        Accepts: '15.0.1(release-tasmota)', 'v15.0.1.4', '15.0.1', etc.
+        Strips parenthetical suffix and leading 'v', then splits on dots.
+        Returns None if no numeric components are parseable.
+        """
+        if not s:
+            return None
+        s = str(s).split("(")[0].strip().lstrip("v")
+        parts = []
+        for p in s.split("."):
+            try:
+                parts.append(int(p))
+            except ValueError:
+                break
+        return tuple(parts) if parts else None
+
+    @staticmethod
+    def _fetch_tasmota_latest(timeout=10):
+        """Fetch latest Tasmota tag from GitHub releases. Returns string or None.
+
+        Standalone - no self.logger, no cache. Safe to call from __init__
+        before the plugin is fully constructed. Callers handle caching.
+        """
+        try:
+            import requests
+            resp = requests.get(
+                "https://api.github.com/repos/arendst/Tasmota/releases/latest",
+                timeout=timeout,
+                headers={
+                    "Accept":     "application/vnd.github+json",
+                    "User-Agent": "Indigo-TasmotaBridge",
+                },
+            )
+            if resp.status_code != 200:
+                return None
+            tag = (resp.json().get("tag_name", "") or "").lstrip("v")
+            return tag or None
+        except Exception:
+            return None
+
+    def _get_tasmota_latest_release(self):
+        """Return latest Tasmota tag, 24h-cached. Calls _fetch_tasmota_latest on miss."""
+        now = time.time()
+        if self.gh_release_cache["tag"] and (now - self.gh_release_cache["ts"]) < 86400:
+            return self.gh_release_cache["tag"]
+        tag = self._fetch_tasmota_latest()
+        if tag:
+            self.gh_release_cache = {"tag": tag, "ts": now}
+        else:
+            self.logger.warning("Could not retrieve latest Tasmota release from GitHub")
+        return tag
+
+    def checkFirmwareUpdates(self, valuesDict=None, typeId=None):
+        """Menu callback - report each Tasmota device's firmware against the
+        latest GitHub release. Bordered, sectioned output for readability.
+        Also called once at startup by runConcurrentThread.
+        """
+        latest_str = self._get_tasmota_latest_release()
+        if not latest_str:
+            return
+        latest = self._parse_version(latest_str)
+
+        devices = [
+            d for d in indigo.devices.iter("self")
+            if d.pluginId == self.pluginId
+        ]
+        if not devices:
+            indigo.server.log("Tasmota Firmware Check: no Tasmota devices in Indigo yet")
+            return
+
+        # Bucket each device by status
+        up_to_date  = []
+        out_of_date = []
+        unknown     = []
+        for dev in sorted(devices, key=lambda d: d.name):
+            cur_str = dev.pluginProps.get("firmware", "")
+            ip      = dev.pluginProps.get("ip", "")
+            cur     = self._parse_version(cur_str)
+            if not cur or not latest:
+                unknown.append((dev.name, cur_str))
+            elif cur >= latest:
+                up_to_date.append((dev.name, cur_str))
+            else:
+                out_of_date.append((dev.name, cur_str, ip))
+
+        # ---- Render report ----
+        bar   = "=" * 60
+        title = "Tasmota Firmware Update Check"
+        pad   = (60 - len(title) - 2) // 2
+        mid   = f"{'=' * pad} {title} {'=' * (60 - pad - len(title) - 2)}"
+        L     = indigo.server.log
+
+        L(bar)
+        L(mid)
+        L(bar)
+        L(f"  Latest release on GitHub: {latest_str}")
+        L(f"  Devices checked:          {len(devices)}    "
+          f"({len(up_to_date)} up-to-date, "
+          f"{len(out_of_date)} need updating"
+          + (f", {len(unknown)} unknown" if unknown else "") + ")")
+
+        if out_of_date:
+            L("")
+            L("  Updates available:")
+            max_name = max(len(n) for n, _, _ in out_of_date)
+            for name, cur_str, ip in out_of_date:
+                upgrade_url = f"http://{ip}/up" if ip else "(no IP)"
+                L(f"    {name:<{max_name}}  {cur_str} -> {latest_str}   {upgrade_url}")
+
+        if up_to_date:
+            L("")
+            L("  Up-to-date:")
+            for name, cur_str in up_to_date:
+                L(f"    {name}  ({cur_str})")
+
+        if unknown:
+            L("")
+            L("  Unknown / unparseable:")
+            for name, cur_str in unknown:
+                L(f"    {name}  ({cur_str!r})")
+
+        if out_of_date:
+            L("")
+            L("  To upgrade a device:")
+            L("    1. Click the device's URL above (opens the /up page)")
+            L("    2. In the 'OTA Url' field, paste one of:")
+            L("         http://ota.tasmota.com/tasmota/release/tasmota.bin.gz       (ESP8266/8285)")
+            L("         http://ota.tasmota.com/tasmota32/release/tasmota32.bin.gz   (ESP32)")
+            L("    3. Click 'Start upgrade'. Device reboots, fetches firmware,")
+            L("       and reconnects to MQTT automatically (~30-60s).")
+
+        L(bar)
+
+    # --------------------------------------------------------
+    # Show Plugin Info
+    # --------------------------------------------------------
 
     def showPluginInfo(self, valuesDict=None, typeId=None):
         if log_startup_banner:

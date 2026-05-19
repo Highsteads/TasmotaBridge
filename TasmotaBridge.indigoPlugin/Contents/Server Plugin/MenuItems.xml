@@ -16,6 +16,11 @@
         <CallbackMethod>dumpDiscoveryCache</CallbackMethod>
     </MenuItem>
 
+    <MenuItem id="checkFirmwareUpdates">
+        <Name>Check Firmware Updates</Name>
+        <CallbackMethod>checkFirmwareUpdates</CallbackMethod>
+    </MenuItem>
+
     <MenuItem id="sep1" isSeparator="true"/>
 
     <MenuItem id="showPluginInfo">
