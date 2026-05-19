@@ -16,6 +16,20 @@
         <CallbackMethod>dumpDiscoveryCache</CallbackMethod>
     </MenuItem>
 
+    <MenuItem id="scanNetwork">
+        <Name>Scan Network for Tasmota Devices...</Name>
+        <CallbackMethod>scanNetwork</CallbackMethod>
+        <ConfigUI>
+            <Field id="info" type="label" alignText="left">
+                <Label>HTTP-probes each IP for a Tasmota device (Status 0). Useful for finding devices that aren't yet pointed at this MQTT broker.</Label>
+            </Field>
+            <Field id="ranges" type="textfield" defaultValue="192.168.1.0/24">
+                <Label>IP Range:</Label>
+                <Description>CIDR like 192.168.4.0/24, a range like 192.168.4.100-192.168.4.200, a single IP, or comma-separated mixtures of any. Max 512 hosts per scan.</Description>
+            </Field>
+        </ConfigUI>
+    </MenuItem>
+
     <MenuItem id="sep1" isSeparator="true"/>
 
     <MenuItem id="showPluginInfo">

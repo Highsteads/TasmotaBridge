@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.1.0
+# Version:     0.2.0
 
 try:
     import indigo
@@ -51,7 +51,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.1.0"
+PLUGIN_VERSION  = "0.2.0"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -71,6 +71,13 @@ LIGHT_RGBCW     = 5
 
 # Offline-after-N-seconds-without-LWT (LWT is retained but we also watch telemetry)
 OFFLINE_TIMEOUT_SEC = 600
+
+# Folder name for auto-created devices
+DEVICE_FOLDER_NAME = "Tasmota"
+
+# IP scan defaults
+SCAN_HTTP_TIMEOUT = 1.5    # seconds per host
+SCAN_MAX_HOSTS    = 512    # safety ceiling on a single scan call
 
 
 # ============================================================
@@ -352,21 +359,32 @@ class Plugin(indigo.PluginBase):
             props["sensorTypes"] = ", ".join(k for k in sensors["sn"].keys() if k != "Time")
 
         try:
+            folder_id = self._ensure_device_folder(DEVICE_FOLDER_NAME)
             dev = indigo.device.create(
                 protocol=indigo.kProtocol.Plugin,
+                pluginId=self.pluginId,
                 address=mac,
                 name=name,
                 deviceTypeId=type_id,
                 props=props,
-                folder=0,
+                folder=folder_id,
             )
+            # subModel renders next to the device name in the Indigo list - put
+            # the IP + model there so users can identify devices at a glance.
+            ip    = config.get("ip", "")
+            model = config.get("md", "")
+            sub   = f"{ip} - {model}" if ip and model else (ip or model)
+            if sub:
+                dev.subModel = sub
+                dev.replaceOnServer()
             self.devices_by_mac[mac] = dev
-            self.logger.info(f"Created Indigo device: {dev.name} (type={type_id}, address={mac})")
+            self.logger.info(f"Created Indigo device: {dev.name} (type={type_id}, address={mac}) in folder '{DEVICE_FOLDER_NAME}'")
         except Exception:
             self.logger.exception(f"Failed to create Indigo device for MAC {mac}")
 
     def _refresh_device_props(self, dev, config, sensors):
-        """Update read-only props (model/firmware/IP) from latest discovery."""
+        """Update read-only props (model/firmware/IP) from latest discovery,
+        and keep subModel (the line shown in the device list) in sync."""
         props = dict(dev.pluginProps)
         changed = False
         for src_key, prop_key in (("md", "model"), ("sw", "firmware"), ("ip", "ip")):
@@ -377,11 +395,27 @@ class Plugin(indigo.PluginBase):
         if changed:
             dev.replacePluginPropsOnServer(props)
 
+        ip    = config.get("ip", "")
+        model = config.get("md", "")
+        sub   = f"{ip} - {model}" if ip and model else (ip or model)
+        if sub and dev.subModel != sub:
+            dev.subModel = sub
+            dev.replaceOnServer()
+
     def _find_device_by_address(self, mac):
         for dev in indigo.devices.iter(f"self"):
             if dev.address == mac:
                 return dev
         return None
+
+    def _ensure_device_folder(self, name):
+        """Return id of named device folder, creating it if absent."""
+        for folder in indigo.devices.folders:
+            if folder.name == name:
+                return folder.id
+        new_folder = indigo.devices.folder.create(name)
+        self.logger.info(f"Created device folder: '{name}'")
+        return new_folder.id
 
     # --------------------------------------------------------
     # Telemetry handling
@@ -714,6 +748,106 @@ class Plugin(indigo.PluginBase):
     def dumpDiscoveryCache(self, valuesDict=None, typeId=None):
         indigo.server.log("=== Tasmota Discovery Cache ===")
         indigo.server.log(json.dumps(self.discovery_cache, indent=2, default=str))
+
+    # --------------------------------------------------------
+    # IP range scan
+    # --------------------------------------------------------
+
+    def _expand_scan_targets(self, ranges_str):
+        """Expand a comma-separated CIDR / IP list into a flat list of IPs."""
+        import ipaddress
+        targets = []
+        for part in (ranges_str or "").split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                if "/" in part:
+                    net = ipaddress.ip_network(part, strict=False)
+                    targets.extend(str(h) for h in net.hosts())
+                elif "-" in part:
+                    start, end = part.split("-", 1)
+                    start_ip = ipaddress.IPv4Address(start.strip())
+                    end_ip   = ipaddress.IPv4Address(end.strip())
+                    cur = int(start_ip)
+                    while cur <= int(end_ip):
+                        targets.append(str(ipaddress.IPv4Address(cur)))
+                        cur += 1
+                else:
+                    targets.append(str(ipaddress.IPv4Address(part)))
+            except (ValueError, ipaddress.AddressValueError) as exc:
+                self.logger.warning(f"Skipping invalid scan range '{part}': {exc}")
+        # Dedupe while preserving order
+        seen = set()
+        return [ip for ip in targets if not (ip in seen or seen.add(ip))]
+
+    def scanNetwork(self, valuesDict=None, typeId=None):
+        """Menu callback - HTTP-probe an IP range for Tasmota devices."""
+        import requests   # pre-installed in Indigo
+
+        ranges_str = (valuesDict or {}).get("ranges", "").strip()
+        if not ranges_str:
+            self.logger.warning("No IP ranges supplied for scan")
+            return False
+
+        targets = self._expand_scan_targets(ranges_str)
+        if not targets:
+            self.logger.warning("No valid scan targets parsed")
+            return False
+        if len(targets) > SCAN_MAX_HOSTS:
+            self.logger.warning(
+                f"Scan target count {len(targets)} exceeds safety ceiling {SCAN_MAX_HOSTS} - truncating"
+            )
+            targets = targets[:SCAN_MAX_HOSTS]
+
+        self.logger.info(f"Scanning {len(targets)} host(s) for Tasmota devices...")
+        found = []
+        for ip in targets:
+            try:
+                resp = requests.get(
+                    f"http://{ip}/cm",
+                    params={"cmnd": "Status 0"},
+                    timeout=SCAN_HTTP_TIMEOUT,
+                )
+                if resp.status_code != 200:
+                    continue
+                data = resp.json()
+                if "Status" not in data or "StatusFWR" not in data:
+                    continue   # not a Tasmota device
+                name   = data["Status"].get("DeviceName", "?")
+                topic  = data["Status"].get("Topic", "?")
+                mac    = (data["StatusNET"].get("Mac", "") or "").replace(":", "").upper()
+                model  = data["StatusFWR"].get("Hardware", "?")
+                fw     = data["StatusFWR"].get("Version", "?")
+                mqtt   = data["StatusMQT"].get("MqttHost", "?")
+                found.append((ip, mac, name, topic, model, fw, mqtt))
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                    ValueError, KeyError):
+                continue
+            except Exception as exc:
+                self.logger.debug(f"Scan {ip}: unexpected error {exc}")
+                continue
+
+        if not found:
+            self.logger.info("Scan complete - no Tasmota devices found in supplied range(s)")
+            return True
+
+        self.logger.info(f"Scan complete - found {len(found)} Tasmota device(s):")
+        known_macs = set(self.discovery_cache.keys())
+        for ip, mac, name, topic, model, fw, mqtt in sorted(found):
+            tag = "[KNOWN]" if mac in known_macs else "[NEW]  "
+            self.logger.info(
+                f"  {tag} {ip:<16} MAC {mac}  '{name}' "
+                f"topic={topic} mqtt={mqtt} fw={fw}"
+            )
+        new_devices = [f for f in found if f[1] not in known_macs]
+        if new_devices:
+            self.logger.info(
+                f"{len(new_devices)} device(s) NOT on our MQTT broker. "
+                "Repoint them via their Tasmota web UI to start auto-discovery: "
+                f"Configuration -> Configure MQTT -> Host: {self.mqtt_host}"
+            )
+        return True
 
     def showPluginInfo(self, valuesDict=None, typeId=None):
         if log_startup_banner:
