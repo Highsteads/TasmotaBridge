@@ -326,6 +326,9 @@ class Plugin(indigo.PluginBase):
 
         existing = self._find_device_by_address(mac)
         if existing:
+            # IMPORTANT: do not touch folderId on existing devices. The folder
+            # is the user's choice once they organise devices into rooms.
+            # _refresh_device_props only updates model/firmware/ip/subModel.
             self.devices_by_mac[mac] = existing
             self._refresh_device_props(existing, config, sensors)
             return
