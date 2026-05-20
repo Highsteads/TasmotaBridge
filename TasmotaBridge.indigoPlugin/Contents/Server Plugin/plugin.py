@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        19-05-2026
-# Version:     0.7.1
+# Version:     0.7.2
 
 try:
     import indigo
@@ -50,7 +50,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.1"
+PLUGIN_VERSION  = "0.7.2"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -918,44 +918,77 @@ class Plugin(indigo.PluginBase):
     # --------------------------------------------------------
 
     def actionControlDevice(self, action, dev):
-        """Relay on/off/toggle handler - Indigo calls this for native relay devices."""
-        channel = dev.pluginProps.get("channel", "1")
-        cmd = "POWER" if channel == "1" else f"POWER{channel}"
-        if action.deviceAction == indigo.kDeviceAction.TurnOn:
-            self._publish_command(dev, cmd, "ON")
-        elif action.deviceAction == indigo.kDeviceAction.TurnOff:
-            self._publish_command(dev, cmd, "OFF")
-        elif action.deviceAction == indigo.kDeviceAction.Toggle:
-            self._publish_command(dev, cmd, "TOGGLE")
-        else:
-            self.logger.debug(f"Unhandled device action {action.deviceAction} on {dev.name}")
+        """Single dispatcher for relay AND dimmer AND shutter actions.
 
-    def actionControlDimmer(self, action, dev):
-        """Dimmer/light handler - Indigo calls this for native dimmer devices."""
+        Indigo's canonical SDK uses ONE actionControlDevice method for all
+        device-control callbacks (TurnOn / TurnOff / Toggle / SetBrightness /
+        BrightenBy / DimBy). A separate `actionControlDimmer` method is NOT
+        in the modern SDK and is silently ignored - we used to have one,
+        which meant tasmotaLight dimmer commands no-op'd. Merged here.
+        See feedback_indigo_action_control_device_single_dispatcher memory.
+        """
         channel = dev.pluginProps.get("channel", "1")
         cmd_power = "POWER" if channel == "1" else f"POWER{channel}"
+        da = action.deviceAction
 
-        if action.deviceAction == indigo.kDeviceAction.TurnOn:
-            self._publish_command(dev, cmd_power, "ON")
-        elif action.deviceAction == indigo.kDeviceAction.TurnOff:
-            self._publish_command(dev, cmd_power, "OFF")
-        elif action.deviceAction == indigo.kDeviceAction.Toggle:
-            self._publish_command(dev, cmd_power, "TOGGLE")
-        elif action.deviceAction == indigo.kDeviceAction.SetBrightness:
-            level = int(action.actionValue)
-            self._publish_command(dev, "Dimmer", str(level))
-        elif action.deviceAction in (
-            indigo.kDeviceAction.BrightenBy,
-            indigo.kDeviceAction.DimBy,
-        ):
-            current = dev.brightness or 0
-            delta = int(action.actionValue)
-            if action.deviceAction == indigo.kDeviceAction.DimBy:
-                delta = -delta
-            new_level = max(0, min(100, current + delta))
-            self._publish_command(dev, "Dimmer", str(new_level))
-        else:
-            self.logger.debug(f"Unhandled dimmer action {action.deviceAction} on {dev.name}")
+        # ----- Relay / Energy plug -----
+        if dev.deviceTypeId in ("tasmotaRelay", "tasmotaEnergyPlug"):
+            if da == indigo.kDeviceAction.TurnOn:
+                self._publish_command(dev, cmd_power, "ON")
+            elif da == indigo.kDeviceAction.TurnOff:
+                self._publish_command(dev, cmd_power, "OFF")
+            elif da == indigo.kDeviceAction.Toggle:
+                self._publish_command(dev, cmd_power, "TOGGLE")
+            else:
+                self.logger.debug(f"Unhandled relay action {da} on {dev.name}")
+            return
+
+        # ----- Light (dimmer / CT / RGB) -----
+        if dev.deviceTypeId == "tasmotaLight":
+            if da == indigo.kDeviceAction.TurnOn:
+                self._publish_command(dev, cmd_power, "ON")
+            elif da == indigo.kDeviceAction.TurnOff:
+                self._publish_command(dev, cmd_power, "OFF")
+            elif da == indigo.kDeviceAction.Toggle:
+                self._publish_command(dev, cmd_power, "TOGGLE")
+            elif da == indigo.kDeviceAction.SetBrightness:
+                level = int(action.actionValue)
+                self._publish_command(dev, "Dimmer", str(level))
+            elif da in (indigo.kDeviceAction.BrightenBy, indigo.kDeviceAction.DimBy):
+                current = dev.brightness or 0
+                delta = int(action.actionValue)
+                if da == indigo.kDeviceAction.DimBy:
+                    delta = -delta
+                new_level = max(0, min(100, current + delta))
+                self._publish_command(dev, "Dimmer", str(new_level))
+            else:
+                self.logger.debug(f"Unhandled light action {da} on {dev.name}")
+            return
+
+        # ----- Shutter -----
+        # Indigo's dimmer slider on a tasmotaShutter sets the position 0-100.
+        # TurnOn = fully open (ShutterOpenN), TurnOff = fully closed (ShutterCloseN).
+        if dev.deviceTypeId == "tasmotaShutter":
+            idx = dev.pluginProps.get("shutterIndex", "1")
+            if da == indigo.kDeviceAction.TurnOn:
+                self._publish_command(dev, f"ShutterOpen{idx}")
+            elif da == indigo.kDeviceAction.TurnOff:
+                self._publish_command(dev, f"ShutterClose{idx}")
+            elif da == indigo.kDeviceAction.SetBrightness:
+                level = int(action.actionValue)
+                self._publish_command(dev, f"ShutterPosition{idx}", str(level))
+            elif da in (indigo.kDeviceAction.BrightenBy, indigo.kDeviceAction.DimBy):
+                current = dev.brightness or 0
+                delta = int(action.actionValue)
+                if da == indigo.kDeviceAction.DimBy:
+                    delta = -delta
+                new_level = max(0, min(100, current + delta))
+                self._publish_command(dev, f"ShutterPosition{idx}", str(new_level))
+            else:
+                self.logger.debug(f"Unhandled shutter action {da} on {dev.name}")
+            return
+
+        self.logger.debug(f"actionControlDevice: no handler for type {dev.deviceTypeId} on {dev.name}")
 
     # --------------------------------------------------------
     # Custom action callbacks (Actions.xml)
