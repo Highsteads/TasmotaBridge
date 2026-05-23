@@ -736,6 +736,21 @@ When adding a new device type, also update:
 
 ---
 
+## Logging
+
+Every log line is prefixed with a millisecond timestamp `[HH:MM:SS.mmm]` so
+events can be correlated tightly with other CliveS plugins (Device Activity
+Monitor uses the same convention).
+
+To turn the prefix off (or back on) at any time:
+
+**Plugins → Tasmota Bridge → Toggle Timestamps in Log (on/off)**
+
+The setting is stored in `pluginPrefs` (`timestampEnabled`) and persists across
+restarts. Defaults to ON.
+
+---
+
 ## License
 
 MIT. See `LICENSE` (forthcoming — pending v1.0).

@@ -4,8 +4,13 @@
 # Description: Indigo bridge for Tasmota MQTT devices (Sonoff, Athom, ESP-based).
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
-# Date:        19-05-2026
-# Version:     0.7.2
+# Date:        23-05-2026
+# Version:     0.7.3
+#
+# v0.7.3 (23-05-2026): Millisecond timestamp [HH:MM:SS.mmm] prefix on every
+# log line via plugin_utils.install_timestamp_filter() — matches Device
+# Activity Monitor convention. Module-level log() helper bumped to ms.
+# New "Toggle Timestamps in Log" menu item.
 
 try:
     import indigo
@@ -23,6 +28,10 @@ try:
     from plugin_utils import log_startup_banner
 except ImportError:
     log_startup_banner = None
+try:
+    from plugin_utils import install_timestamp_filter
+except ImportError:
+    install_timestamp_filter = None
 
 sys.path.insert(0, "/Library/Application Support/Perceptive Automation")
 try:
@@ -50,7 +59,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.2"
+PLUGIN_VERSION  = "0.7.3"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -80,7 +89,7 @@ DEVICE_FOLDER_NAME = "Tasmota"
 # ============================================================
 
 def log(message, level="INFO"):
-    indigo.server.log(f"[{datetime.now().strftime('%H:%M:%S')}] {message}", level=level)
+    indigo.server.log(f"[{datetime.now().strftime('%H:%M:%S.%f')[:-3]}] {message}", level=level)
 
 
 def normalise_mac(raw):
@@ -125,6 +134,12 @@ class Plugin(indigo.PluginBase):
 
         self.debug = pluginPrefs.get("logLevel", "INFO") == "DEBUG"
         self.log_raw = bool(pluginPrefs.get("logRawPayloads", False))
+        self.timestamp_enabled = bool(pluginPrefs.get("timestampEnabled", True))
+
+        if install_timestamp_filter:
+            self._ts_filter = install_timestamp_filter(self, enabled=self.timestamp_enabled)
+        else:
+            self._ts_filter = None
 
         # Per-MAC discovery cache: {mac: {"config": {...}, "sensors": {...}}}
         self.discovery_cache = {}
@@ -1451,12 +1466,24 @@ class Plugin(indigo.PluginBase):
     # --------------------------------------------------------
 
     def showPluginInfo(self, valuesDict=None, typeId=None):
+        extras = [
+            ("MQTT Broker:",        f"{self.mqtt_host}:{self.mqtt_port}"),
+            ("MQTT Connected:",     "yes" if self.mqtt_connected else "no"),
+            ("Devices discovered:", str(len(self.discovery_cache))),
+            ("Devices in Indigo:",  str(len(self.devices_by_mac))),
+            ("Timestamps in Log:",  "ON" if self.timestamp_enabled else "OFF"),
+        ]
         if log_startup_banner:
-            log_startup_banner(self.pluginId, self.pluginDisplayName, self.pluginVersion, extras=[
-                ("MQTT Broker:", f"{self.mqtt_host}:{self.mqtt_port}"),
-                ("MQTT Connected:", "yes" if self.mqtt_connected else "no"),
-                ("Devices discovered:", str(len(self.discovery_cache))),
-                ("Devices in Indigo:", str(len(self.devices_by_mac))),
-            ])
+            log_startup_banner(self.pluginId, self.pluginDisplayName, self.pluginVersion, extras=extras)
         else:
             indigo.server.log(f"{self.pluginDisplayName} v{self.pluginVersion}")
+            for label, value in extras:
+                indigo.server.log(f"  {label} {value}")
+
+    def menuToggleTimestamps(self):
+        self.timestamp_enabled = not self.timestamp_enabled
+        self.pluginPrefs["timestampEnabled"] = self.timestamp_enabled
+        if self._ts_filter:
+            self._ts_filter.enabled = self.timestamp_enabled
+        state = "ON" if self.timestamp_enabled else "OFF"
+        indigo.server.log(f"[{self.pluginDisplayName}] Timestamps in Log -> {state}")
