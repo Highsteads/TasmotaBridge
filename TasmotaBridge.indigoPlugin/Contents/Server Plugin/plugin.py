@@ -179,15 +179,7 @@ class Plugin(indigo.PluginBase):
         if latest_tasmota:
             self.gh_release_cache = {"tag": latest_tasmota, "ts": time.time()}
 
-        if log_startup_banner:
-            log_startup_banner(pluginId, pluginDisplayName, pluginVersion, extras=[
-                ("MQTT Broker:",      f"{self.mqtt_host}:{self.mqtt_port}"),
-                ("MQTT User:",        self.mqtt_username or "(anonymous)"),
-                ("Auto-create:",      "yes" if self.auto_create else "no"),
-                ("Latest Tasmota:",   latest_tasmota or "(GitHub unreachable)"),
-            ])
-        else:
-            indigo.server.log(f"{pluginDisplayName} v{pluginVersion} starting")
+        # Startup banner moved to showPluginInfo on demand (revised 25-May-2026 per Jay).
 
     # --------------------------------------------------------
     # Lifecycle
