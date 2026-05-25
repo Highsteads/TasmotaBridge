@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        23-05-2026
-# Version:     0.7.3
+# Version:     0.7.4
 #
 # v0.7.3 (23-05-2026): Millisecond timestamp [HH:MM:SS.mmm] prefix on every
 # log line via plugin_utils.install_timestamp_filter() — matches Device
@@ -59,7 +59,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.3"
+PLUGIN_VERSION  = "0.7.4"
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -927,6 +927,19 @@ class Plugin(indigo.PluginBase):
         if mac and mac in self.devices_by_mac:
             del self.devices_by_mac[mac]
         self.logger.debug(f"deviceStopComm: {dev.name}")
+
+    @staticmethod
+    def didDeviceCommPropertyChange(oldDevice, newDevice):
+        """Restart comm only for props that affect MQTT routing or action dispatch.
+
+        `topic` is the device's MQTT topic root; `channel` selects which relay
+        on multi-channel devices; `shutterIndex` picks the shutter on
+        roller-shutter firmware. `address` (MAC), `ip`, `model`, `firmware`
+        are display-only metadata refreshed from the discovery payload — not
+        connection-defining, so cosmetic changes shouldn't cycle comm.
+        """
+        keys = ("topic", "channel", "shutterIndex")
+        return any(oldDevice.pluginProps.get(k) != newDevice.pluginProps.get(k) for k in keys)
 
     # --------------------------------------------------------
     # Indigo native control callbacks (relay/dimmer)
