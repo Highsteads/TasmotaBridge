@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        23-05-2026
-# Version:     0.7.4
+# Version:     0.7.5
 #
 # v0.7.3 (23-05-2026): Millisecond timestamp [HH:MM:SS.mmm] prefix on every
 # log line via plugin_utils.install_timestamp_filter() — matches Device
@@ -59,7 +59,15 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.4"
+PLUGIN_VERSION  = "0.7.5"
+
+
+def _as_int(value, default):
+    """Coerce to int, returning default on blank/non-numeric (config + action props)."""
+    try:
+        return int(str(value).strip())
+    except (ValueError, TypeError):
+        return default
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -159,7 +167,7 @@ class Plugin(indigo.PluginBase):
 
         # Resolve broker config: IndigoSecrets > pluginPrefs
         self.mqtt_host     = MQTT_BROKER     or pluginPrefs.get("mqttHost", "")
-        self.mqtt_port     = int(pluginPrefs.get("mqttPort", "0") or 0) or MQTT_PORT or 1883
+        self.mqtt_port     = _as_int(pluginPrefs.get("mqttPort"), 0) or MQTT_PORT or 1883
         self.mqtt_username = MQTT_USERNAME   or pluginPrefs.get("mqttUsername", "")
         self.mqtt_password = MQTT_PASSWORD   or pluginPrefs.get("mqttPassword", "")
         self.mqtt_tls      = bool(pluginPrefs.get("mqttTLS", False))
@@ -937,6 +945,14 @@ class Plugin(indigo.PluginBase):
     # Indigo native control callbacks (relay/dimmer)
     # --------------------------------------------------------
 
+    def actionControlSensor(self, action, dev):
+        # tasmotaSensor + tasmotaButton are type="sensor"; without this a Send Status Request
+        # logs "plugin does not define method actionControlSensor" and drops the action.
+        if action.sensorAction == indigo.kSensorAction.RequestStatus:
+            self._publish_command(dev, "Status", "0")
+        else:
+            self.logger.warning(f"{dev.name}: unsupported sensor action {action.sensorAction}")
+
     def actionControlDevice(self, action, dev):
         """Single dispatcher for relay AND dimmer AND shutter actions.
 
@@ -1025,13 +1041,13 @@ class Plugin(indigo.PluginBase):
         self._publish_command(dev, cmd, payload)
 
     def actionSetHSBColor(self, action, dev):
-        h = int(action.props.get("hue", 0))
-        s = int(action.props.get("saturation", 100))
-        b = int(action.props.get("brightness", 100))
+        h = _as_int(action.props.get("hue"), 0)
+        s = _as_int(action.props.get("saturation"), 100)
+        b = _as_int(action.props.get("brightness"), 100)
         self._publish_command(dev, "HSBColor", f"{h},{s},{b}")
 
     def actionSetColorTemp(self, action, dev):
-        m = int(action.props.get("mired", 300))
+        m = _as_int(action.props.get("mired"), 300)
         self._publish_command(dev, "CT", str(m))
 
     def actionShutterOpen(self, action, dev):
