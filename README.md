@@ -105,10 +105,12 @@ MQTT_USERNAME = "your-user"
 MQTT_PASSWORD = "your-password"
 ```
 
-If `IndigoSecrets.py` is absent, fill the same values in the PluginConfig
-dialog. Either path works equally well — the dialog is mainly for users
-who don't already use CliveS's `IndigoSecrets.py` convention for their
-other plugins.
+If you do not have `IndigoSecrets.py` yet, copy `IndigoSecrets_example.py` (shipped
+with the CliveS plugins) into `/Library/Application Support/Perceptive Automation/`
+and rename the copy to `IndigoSecrets.py`. If `IndigoSecrets.py` is absent, fill the
+same values in the PluginConfig dialog. Either path works equally well — the dialog
+is mainly for users who don't already use CliveS's `IndigoSecrets.py` convention for
+their other plugins.
 
 ### TLS
 
