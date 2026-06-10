@@ -10,3 +10,6 @@ Contents/Packages/
 **/Contents/Packages/
 *.zip
 CLAUDE.md
+
+# Test runner artefacts
+.pytest_cache/

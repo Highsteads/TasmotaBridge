@@ -4,8 +4,8 @@
 # Description: Indigo bridge for Tasmota MQTT devices (Sonoff, Athom, ESP-based).
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
-# Date:        23-05-2026
-# Version:     0.7.5
+# Date:        10-06-2026
+# Version:     0.7.6
 #
 # v0.7.3 (23-05-2026): Millisecond timestamp [HH:MM:SS.mmm] prefix on every
 # log line via plugin_utils.install_timestamp_filter() — matches Device
@@ -59,7 +59,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.5"
+PLUGIN_VERSION  = "0.7.6"
 
 
 def _as_int(value, default):
@@ -497,7 +497,7 @@ class Plugin(indigo.PluginBase):
             dev.replaceOnServer()
 
     def _find_device_by_address(self, mac):
-        for dev in indigo.devices.iter(f"self"):
+        for dev in indigo.devices.iter("self"):
             if dev.address == mac:
                 return dev
         return None
