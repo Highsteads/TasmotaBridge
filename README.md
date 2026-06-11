@@ -557,7 +557,7 @@ For implementation details, browse
 ### A new Tasmota device hasn't appeared in Indigo
 
 1. **Check MQTT is configured on the device.** Open the device's web UI
-   (e.g. `http://192.168.4.144`) → Configuration → Configure MQTT.
+   (e.g. `http://192.168.1.144`) → Configuration → Configure MQTT.
    Confirm Host points at your Mosquitto broker and credentials are
    correct.
 2. **Check discovery is enabled.** From the device's Console:
