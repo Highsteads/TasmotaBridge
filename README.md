@@ -37,7 +37,8 @@ runs natively on the Indigo Mac, or any other broker on your LAN.
 - [FAQ](#faq)
 - [Beta Tester Checklist](#beta-tester-checklist)
 - [Contributing](#contributing)
-- [License](#license)
+- [Logging](#logging)
+- [Authors & licence](#authors--licence)
 
 ---
 
@@ -396,6 +397,7 @@ Available under `Plugins → Tasmota Bridge`:
 | **Dump Discovery Cache to Log** | Print the full JSON discovery cache. Verbose; for debugging. |
 | **Upgrade Tasmota Firmware...** | Picker dialog. Auto-detects ESP architecture, sets OTA URL, triggers upgrade. |
 | **Open Tasmota Device Web UI...** | Picker dialog. Opens the chosen device's main web page in the default browser on the Indigo Mac. |
+| **Toggle Timestamps in Log (on/off)** | Turns the `[HH:MM:SS.mmm]` prefix on every log line on or off. See [Logging](#logging). |
 | **Show Plugin Info** | Re-print the startup banner with current MQTT broker, connection status, and device counts. |
 
 ---
