@@ -5,7 +5,12 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Opus 4.7
 # Date:        10-06-2026
-# Version:     0.7.6
+# Version:     0.7.7
+#
+# v0.7.7 (08-08-2026): REQUIRED Info.plist KEY. `CFBundleURLTypes` was MISSING,
+# so the plugin had no support URL for its "About" menu item — one of the SIX
+# keys the official Developer's Guide lists as required. Found by an estate
+# check. No plugin logic changed.
 #
 # v0.7.3 (23-05-2026): Millisecond timestamp [HH:MM:SS.mmm] prefix on every
 # log line via plugin_utils.install_timestamp_filter() — matches Device
