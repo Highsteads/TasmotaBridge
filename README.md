@@ -1,5 +1,6 @@
 # Tasmota Bridge — Indigo Plugin
 
+**Version:** 0.7.7 | **Author:** CliveS & Claude | **Platform:** Indigo 2025.2 or later
 Bridges [Tasmota](https://tasmota.github.io/docs/) MQTT devices into
 [Indigo Domotics](https://www.indigodomo.com/) 2025.2+ as native device
 types. Designed to work locally over any Mosquitto MQTT broker — pairs
