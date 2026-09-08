@@ -65,7 +65,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.6"
+PLUGIN_VERSION  = "0.7.7"
 
 
 def _as_int(value, default):
