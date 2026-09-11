@@ -3,9 +3,9 @@
 # Filename:    plugin.py
 # Description: Indigo bridge for Tasmota MQTT devices (Sonoff, Athom, ESP-based).
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
-# Author:      CliveS & Claude Opus 4.7
-# Date:        10-06-2026
-# Version:     0.7.7
+# Author:      CliveS & Claude Fable 5.1
+# Date:        11-09-2026
+# Version:     0.7.8
 #
 # v0.7.7 (08-08-2026): REQUIRED Info.plist KEY. `CFBundleURLTypes` was MISSING,
 # so the plugin had no support URL for its "About" menu item — one of the SIX
@@ -65,7 +65,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.7"
+PLUGIN_VERSION  = "0.7.8"
 
 
 def _as_int(value, default):
