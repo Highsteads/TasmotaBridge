@@ -5,7 +5,7 @@
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
 # Author:      CliveS & Claude Fable 5.1
 # Date:        11-09-2026
-# Version:     0.7.8
+# Version:     0.7.9
 #
 # v0.7.7 (08-08-2026): REQUIRED Info.plist KEY. `CFBundleURLTypes` was MISSING,
 # so the plugin had no support URL for its "About" menu item — one of the SIX
@@ -65,7 +65,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.8"
+PLUGIN_VERSION  = "0.7.9"
 
 
 def _as_int(value, default):
@@ -96,6 +96,14 @@ OFFLINE_TIMEOUT_SEC = 600
 
 # Folder name for auto-created devices
 DEVICE_FOLDER_NAME = "Tasmota"
+
+# Device types whose output is a relay: switched on and off, one Indigo device
+# per channel on a multi-relay board. ONE owner for the rule. It used to be
+# written out as a literal tuple in three places -- creating the per-channel
+# devices, writing onOffState, and handling TurnOn/TurnOff -- so a relay type
+# added to one and missed in another would create devices that could not be
+# switched, or switch devices that never report their state (21-09-2026).
+RELAY_TYPES = frozenset({"tasmotaRelay", "tasmotaEnergyPlug"})
 
 
 # ============================================================
@@ -435,7 +443,7 @@ class Plugin(indigo.PluginBase):
 
         type_id, channel = self._detect_device_type(config, sensors)
         base_name = config.get("dn") or config.get("hn") or f"Tasmota {mac[-6:]}"
-        channels  = self._relay_channels(config) if type_id in ("tasmotaRelay", "tasmotaEnergyPlug") else [channel]
+        channels  = self._relay_channels(config) if type_id in RELAY_TYPES else [channel]
         total     = len(channels)
 
         for n in channels:
@@ -843,7 +851,7 @@ class Plugin(indigo.PluginBase):
             indigo.trigger.execute(trigger)
 
     def _update_relay_state(self, dev, on_state):
-        if dev.deviceTypeId in ("tasmotaRelay", "tasmotaEnergyPlug"):
+        if dev.deviceTypeId in RELAY_TYPES:
             dev.updateStateOnServer("onOffState", on_state)
         elif dev.deviceTypeId == "tasmotaLight":
             dev.updateStateOnServer("onOffState", on_state)
@@ -994,7 +1002,7 @@ class Plugin(indigo.PluginBase):
         da = action.deviceAction
 
         # ----- Relay / Energy plug -----
-        if dev.deviceTypeId in ("tasmotaRelay", "tasmotaEnergyPlug"):
+        if dev.deviceTypeId in RELAY_TYPES:
             if da == indigo.kDeviceAction.TurnOn:
                 self._publish_command(dev, cmd_power, "ON")
             elif da == indigo.kDeviceAction.TurnOff:
