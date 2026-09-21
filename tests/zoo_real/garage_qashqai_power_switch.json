@@ -1,8 +1,8 @@
 {
-  "_mac": "2462AB6E6604",
+  "_mac": "AABBCC000002",
   "_name": "Garage Qashqai Power Switch",
   "config": {
-    "ip": "192.168.4.141",
+    "ip": "192.168.1.141",
     "dn": "Garage Qashqai Power Switch",
     "fn": [
       "Garage Qashqai Power Switch",
@@ -15,7 +15,7 @@
       null
     ],
     "hn": "QashqaiPowerPlug",
-    "mac": "2462AB6E6604",
+    "mac": "AABBCC000002",
     "md": "Athom PG04-UK16A",
     "ty": 0,
     "if": 0,

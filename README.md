@@ -312,8 +312,8 @@ For devices with multiple relays (e.g. Sonoff 4CH), the plugin creates
 - Multi-channel device: `<dn> - Ch 1`, `<dn> - Ch 2`, `<dn> - Ch 3`, `<dn> - Ch 4`
 
 Address scheme:
-- **Channel 1** keeps the bare MAC: `2462AB6CDC64`
-- **Channels 2+** get a suffix: `2462AB6CDC64-2`, `2462AB6CDC64-3`, ...
+- **Channel 1** keeps the bare MAC: `AABBCC000001`
+- **Channels 2+** get a suffix: `AABBCC000001-2`, `AABBCC000001-3`, ...
 
 The plugin routes `POWER1` to channel 1, `POWER2` to channel 2, etc.
 Each sibling controls its own relay independently via Indigo's native

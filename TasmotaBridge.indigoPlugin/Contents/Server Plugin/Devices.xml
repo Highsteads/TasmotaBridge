@@ -18,11 +18,11 @@
         <ConfigUI>
             <Field id="address" type="textfield" defaultValue="">
                 <Label>MAC Address:</Label>
-                <Description>12-char uppercase MAC, no separators (e.g. 2462AB6CDC64)</Description>
+                <Description>12-char uppercase MAC, no separators (e.g. AABBCC000001)</Description>
             </Field>
             <Field id="topic" type="textfield" defaultValue="">
                 <Label>MQTT Topic:</Label>
-                <Description>Tasmota base topic (e.g. tasmota_6CDC64)</Description>
+                <Description>Tasmota base topic (e.g. tasmota_000001)</Description>
             </Field>
             <Field id="channel" type="textfield" defaultValue="1">
                 <Label>Relay Channel:</Label>

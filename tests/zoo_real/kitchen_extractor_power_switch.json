@@ -1,8 +1,8 @@
 {
-  "_mac": "2462AB6CDC64",
+  "_mac": "AABBCC000001",
   "_name": "Kitchen Extractor Power Switch",
   "config": {
-    "ip": "192.168.4.144",
+    "ip": "192.168.1.144",
     "dn": "Kitchen Extractor Power Switch",
     "fn": [
       "Kitchen Extractor Power Switch",
@@ -14,8 +14,8 @@
       null,
       null
     ],
-    "hn": "tasmota-6CDC64-7268",
-    "mac": "2462AB6CDC64",
+    "hn": "tasmota-000001-0001",
+    "mac": "AABBCC000001",
     "md": "Athom PG04-UK16A",
     "ty": 0,
     "if": 0,
@@ -29,7 +29,7 @@
       "HOLD"
     ],
     "sw": "15.4.0",
-    "t": "tasmota_6CDC64",
+    "t": "tasmota_000001",
     "ft": "%prefix%/%topic%/",
     "tp": [
       "cmnd",
