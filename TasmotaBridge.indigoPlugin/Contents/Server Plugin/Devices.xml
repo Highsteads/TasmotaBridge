@@ -38,7 +38,7 @@
             <Field id="firmware" type="textfield" readonly="true" defaultValue="">
                 <Label>Firmware:</Label>
             </Field>
-            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="chip"             type="textfield" hidden="true" defaultValue=""/>
             <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
@@ -110,7 +110,7 @@
             </Field>
             <Field id="SupportsEnergyMeter" type="checkbox" hidden="true" defaultValue="true"/>
             <Field id="SupportsEnergyMeterCurPower" type="checkbox" hidden="true" defaultValue="true"/>
-            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="chip"             type="textfield" hidden="true" defaultValue=""/>
             <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
@@ -217,7 +217,7 @@
             <Field id="SupportsRGB" type="checkbox" hidden="true" defaultValue="false"/>
             <Field id="SupportsWhite" type="checkbox" hidden="true" defaultValue="false"/>
             <Field id="SupportsWhiteTemperature" type="checkbox" hidden="true" defaultValue="false"/>
-            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="chip"             type="textfield" hidden="true" defaultValue=""/>
             <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
@@ -245,6 +245,21 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
                 <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+            <State id="signal">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi Signal Changed</TriggerLabel>
+                <ControlPageLabel>WiFi Signal dBm</ControlPageLabel>
+            </State>
+            <State id="uptime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Uptime Changed</TriggerLabel>
+                <ControlPageLabel>Uptime</ControlPageLabel>
+            </State>
+            <State id="lastSeen">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Seen Changed</TriggerLabel>
+                <ControlPageLabel>Last Seen</ControlPageLabel>
             </State>
             <State id="firmwareStatus">
                 <ValueType>String</ValueType>
@@ -292,6 +307,16 @@
                 <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
                 <ControlPageLabel>WiFi RSSI</ControlPageLabel>
             </State>
+            <State id="signal">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi Signal Changed</TriggerLabel>
+                <ControlPageLabel>WiFi Signal dBm</ControlPageLabel>
+            </State>
+            <State id="uptime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Uptime Changed</TriggerLabel>
+                <ControlPageLabel>Uptime</ControlPageLabel>
+            </State>
             <State id="lastSeen">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Last Seen Changed</TriggerLabel>
@@ -327,7 +352,7 @@
             <Field id="model" type="textfield" readonly="true" defaultValue="">
                 <Label>Model:</Label>
             </Field>
-            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="chip"             type="textfield" hidden="true" defaultValue=""/>
             <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
@@ -355,6 +380,21 @@
                 <ValueType>Integer</ValueType>
                 <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
                 <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+            <State id="signal">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi Signal Changed</TriggerLabel>
+                <ControlPageLabel>WiFi Signal dBm</ControlPageLabel>
+            </State>
+            <State id="uptime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Uptime Changed</TriggerLabel>
+                <ControlPageLabel>Uptime</ControlPageLabel>
+            </State>
+            <State id="lastSeen">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Seen Changed</TriggerLabel>
+                <ControlPageLabel>Last Seen</ControlPageLabel>
             </State>
             <State id="firmwareStatus">
                 <ValueType>String</ValueType>
@@ -392,7 +432,7 @@
             <Field id="model" type="textfield" readonly="true" defaultValue="">
                 <Label>Model:</Label>
             </Field>
-            <Field id="arch"             type="textfield" hidden="true" defaultValue=""/>
+            <Field id="chip"             type="textfield" hidden="true" defaultValue=""/>
             <Field id="seenDynamicKeys"  type="textfield" hidden="true" defaultValue=""/>
         </ConfigUI>
         <States>
@@ -405,6 +445,26 @@
                 <ValueType>String</ValueType>
                 <TriggerLabel>Availability Changed</TriggerLabel>
                 <ControlPageLabel>Availability</ControlPageLabel>
+            </State>
+            <State id="rssi">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi RSSI Changed</TriggerLabel>
+                <ControlPageLabel>WiFi RSSI</ControlPageLabel>
+            </State>
+            <State id="signal">
+                <ValueType>Integer</ValueType>
+                <TriggerLabel>WiFi Signal Changed</TriggerLabel>
+                <ControlPageLabel>WiFi Signal dBm</ControlPageLabel>
+            </State>
+            <State id="uptime">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Uptime Changed</TriggerLabel>
+                <ControlPageLabel>Uptime</ControlPageLabel>
+            </State>
+            <State id="lastSeen">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Seen Changed</TriggerLabel>
+                <ControlPageLabel>Last Seen</ControlPageLabel>
             </State>
             <State id="firmwareStatus">
                 <ValueType>String</ValueType>

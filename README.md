@@ -2,7 +2,7 @@
 
 **Brings your Tasmota plugs, switches, lights and sensors into Indigo, through your own MQTT broker.**
 
-**Version:** 0.7.9 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later, and an MQTT broker on your network
+**Version:** 0.8.0 | **Author:** CliveS & Claude | **Needs:** Indigo 2025.2 or later, and an MQTT broker on your network
 
 **[Read the full guide](https://highsteads.github.io/TasmotaBridge/)** — setting up, what everything means, and what to do when something goes wrong.
 
@@ -52,9 +52,9 @@ The [full guide](https://highsteads.github.io/TasmotaBridge/) goes through each 
 
 ## What's new
 
-**v0.7.9** — The list of which device types are relays is written once inside the plugin, with a check that it agrees with the device definitions. The example addresses in the device settings help are now made-up values. Nothing about how the plugin behaves has changed.
+**v0.8.0** — Button presses, **Request Status Update**, the colour mode of a light and every **Log Level** choice now work, a change to any broker setting reconnects straight away, and each kind of ESP32 chip gets its own firmware. A setting that never did anything has gone.
 
-**v0.7.8** — The plugin carries a note of where its code lives on GitHub in the same form as other Indigo plugins.
+**v0.7.9** — The list of which device types are relays is written once inside the plugin, with a check that it agrees with the device definitions. The example addresses in the device settings help are now made-up values. Nothing about how the plugin behaves has changed.
 
 Every version is listed in the [version history](https://highsteads.github.io/TasmotaBridge/changelog.html).
 

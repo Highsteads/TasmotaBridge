@@ -17,7 +17,7 @@ Each device is named with the name Tasmota gives it, or its host name if it has 
 
 ## Readings every device type shows
 
-Most of the device types carry the same set of readings about the device itself. The table lists them with the names Indigo shows under the device's states.
+Every device type carries the same set of readings about the device itself. The table lists them with the names Indigo shows under the device's states.
 
 | State | What it means |
 |---|---|
@@ -73,9 +73,11 @@ The device's **Light Subtype** setting shows which kind of light Tasmota reporte
 
 | State | What it means |
 |---|---|
+| `colorMode` | What the light is showing: **rgb** for a colour, **ct** for adjustable white, **white** for the plain white of a colour-and-white light, or **dimmer** for a light with only brightness. |
 | `colorTemp` | The shade of white, in mireds — 153 is the coolest, bluest white and 500 the warmest. |
 | `hsbColor` | The last colour the light reported. |
-| `availability`, `rssi`, `firmwareStatus`, `restartReason` | As in the first table. |
+
+It also carries all the readings in the first table.
 
 ## Tasmota Sensor
 
@@ -85,7 +87,7 @@ You do not need to tell the plugin what sensors are attached. Every reading the 
 
 A plug or switch with a sensor attached gets the same extra states on its own device.
 
-It also carries `availability`, `rssi`, `lastSeen`, `firmwareStatus` and `restartReason`.
+It also carries all the readings in the first table.
 
 ## Tasmota Button
 
@@ -96,7 +98,10 @@ For a device that only has buttons, such as a wall switch set up with no relay. 
 | `lastButton` | Which button was pressed last, from 1 to 8. |
 | `lastAction` | What kind of press it was, as Tasmota reports it, such as a single press, a double press or a long hold. |
 | `pressCount` | How many presses the plugin has counted. It goes up by one on every press, so a trigger can tell two identical presses apart. |
-| `availability`, `rssi`, `firmwareStatus`, `restartReason` | As in the first table. |
+
+It also carries all the readings in the first table.
+
+The button has to be set to report its presses, with the Tasmota command `SetOption73 1`, as the [Actions and triggers](actions-and-triggers.md) page explains.
 
 ## Tasmota Shutter
 
@@ -109,4 +114,5 @@ For a blind, curtain or roller shutter. Indigo treats it like a dimmer, where 0%
 | State | What it means |
 |---|---|
 | `direction` | **opening**, **closing** or **stopped**. |
-| `availability`, `firmwareStatus`, `restartReason` | As in the first table. |
+
+It also carries all the readings in the first table.

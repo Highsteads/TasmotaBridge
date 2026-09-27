@@ -7,6 +7,20 @@ nav_order: 10
 
 The newest version is at the top.
 
+## 0.8.0 — 27 September 2026
+
+Writing the guide turned up a handful of things that did not do what they said, and this puts them right.
+
+- A button press reaches Indigo in the form Tasmota actually sends it, so the **Action** box on the **Tasmota Button Pressed** trigger and the `lastAction` state both work. A button has to be set to report presses with `SetOption73 1`, and the guide now says so.
+- **Request Status Update** brings a device's readings up to date from its reply. Before, it asked and never listened to the answer.
+- Every **Log Level** choice works, and takes effect when you click **Save**. Before, only **Debug** did anything, and only after a restart.
+- A light's `colorMode` state says whether it is showing a colour or white. It had always been there, and always empty.
+- Lights, buttons, sensors and shutters now show the Wi-Fi signal, how long the device has been running and when it last reported, like the plugs always did.
+- Changing the broker's port, user name, password or TLS setting reconnects as soon as you save, and an address in `IndigoSecrets.py` still wins over the Configure box afterwards, as it does when the plugin starts.
+- **Upgrade Tasmota Firmware...** picks the right firmware for each kind of ESP32 chip, such as the C3 and S3, and refuses a chip it does not know rather than guess. The ESP32 download it used before no longer exists, so ESP32 upgrades had stopped working altogether.
+- The end of the firmware check now points to **Upgrade Tasmota Firmware...**, a menu item that exists, rather than one that never did.
+- **Force-enable Tasmota discovery on each device** has gone from **Configure**. It never did anything, and could not have, because the plugin only hears from devices that already announce themselves.
+
 ## 0.7.9 — 21 September 2026
 
 The list of which device types are relays was written out in three places in the plugin, and now it is written once, with a check that it agrees with the device definitions. The example addresses in the device settings help are now made-up values. Nothing about how the plugin behaves has changed.

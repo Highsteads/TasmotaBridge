@@ -13,7 +13,7 @@ The plugin does not know where your broker is. Fill in **Broker Host** in **Plug
 
 ## The log says "MQTT connect failed"
 
-The plugin reached the broker, but the broker refused it. The usual cause is a wrong **Username** or **Password**. Check them against the broker's own settings, save, and choose **Plugins → Tasmota Bridge → Reload**.
+The plugin reached the broker, but the broker refused it. The usual cause is a wrong **Username** or **Password**. Check them against the broker's own settings and click **Save**. The plugin reconnects straight away.
 
 ## The log says "MQTT disconnected (will auto-reconnect)"
 
@@ -45,7 +45,7 @@ The plugin makes one Indigo device for each relay the device says it has. Choose
 
 ## A device's readings are out of date
 
-Tasmota sends its regular report every five minutes unless you have changed its **TelePeriod** setting. To have a device report straight away, use the **Send Raw Tasmota Command** action with `TelePeriod`.
+Tasmota sends its regular report every five minutes unless you have changed its **TelePeriod** setting. To bring a device up to date straight away, use the **Request Status Update** action.
 
 ## The log says a state is "not defined"
 
@@ -59,9 +59,13 @@ The device has sent a reading the plugin had not seen before. For a sensor readi
 
 The plugin does not know the device's network address, so it cannot open its web page or upgrade it. Restart the device, or choose **Discover Tasmota Devices**, and the plugin picks the address up from what the device reports.
 
-## A firmware upgrade says it "could not detect ESP architecture"
+## A firmware upgrade says "could not tell which Tasmota firmware this chip needs"
 
-The device did not answer when the plugin asked which chip it uses. Check the device's web page opens, then try again, or upgrade it from its own page with the **Open Firmware Upgrade Page** action.
+The device did not answer when the plugin asked which chip it uses, or it has a chip the plugin does not know the firmware for. If a line just before it names the chip, the plugin does not know that one. Otherwise check the device's web page opens and try again. Either way, you can upgrade it from its own page with the **Open Firmware Upgrade Page** action.
+
+## A button press does nothing in Indigo
+
+The button has not been set to report its presses. Send it `SetOption73 1` with the **Send Raw Tasmota Command** action, as the [Actions and triggers](actions-and-triggers.md) page explains.
 
 ## Still stuck?
 

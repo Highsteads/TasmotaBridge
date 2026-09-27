@@ -19,20 +19,19 @@ Open these with **Plugins → Tasmota Bridge → Configure**. They apply to ever
 | **Password** | The password to go with it. |
 | **Use TLS** | Tick this if your broker only accepts encrypted connections, which is known as TLS. Most brokers on a home network do not use it, and nor does Tasmota to start with. |
 
-If you change **Broker Host** and click Save, the plugin reconnects to the new broker straight away, picking up the other broker settings as it does. A change to **Broker Port**, **Username**, **Password** or **Use TLS** on its own takes effect the next time the plugin starts, so after saving choose **Plugins → Tasmota Bridge → Reload**.
+Change any of these and click **Save**, and the plugin reconnects to the broker straight away with the new details. There is no need to reload the plugin.
 
 ### Device Discovery
 
 | Setting | What it does |
 |---|---|
 | **Auto-create Indigo devices on discovery** | Ticked, the plugin creates an Indigo device for each Tasmota device it finds. Unticked, it still finds them and lists them with **List Seen Devices**, but you create the Indigo devices yourself. It is ticked to start with. |
-| **Force-enable Tasmota discovery on each device** | This setting has no effect in this version. Leave it unticked. |
 
 ### Logging
 
 | Setting | What it does |
 |---|---|
-| **Log Level** | **Debug (verbose)** adds a line to the Event Log for much of what the plugin does, which is only useful when chasing a problem. The other three choices give the normal log, which has the plugin's messages, warnings and errors. A change here takes effect the next time the plugin starts. |
+| **Log Level** | **Debug (verbose)** adds a line to the Event Log for much of what the plugin does, which is only useful when chasing a problem. **Info** gives the normal log, with the plugin's messages, warnings and errors. **Warning only** leaves out the everyday messages, and **Error only** shows nothing but errors. A change here takes effect as soon as you click **Save**. |
 | **Log raw MQTT payloads (debug)** | Writes every message the plugin receives from the broker into the Event Log. It only shows anything while **Log Level** is **Debug**, and it adds a great many lines, so leave it off unless you are asked for it. |
 
 ### Keeping the broker details in one file
@@ -46,7 +45,7 @@ MQTT_USERNAME = "your-user"
 MQTT_PASSWORD = "your-password"
 ```
 
-When the plugin starts, a broker address, user name or password in the file is used, whatever the Configure box says. The port comes from the Configure box whenever one is set there. Leave `MQTT_BROKER` as `""` if you would rather use the Configure box. The file holds settings for my other plugins too, and this plugin reads only the four lines above.
+A broker address, user name or password in the file is used whatever the Configure box says, both when the plugin starts and when you save **Configure**. The port comes from the Configure box whenever one is set there. Leave `MQTT_BROKER` as `""` if you would rather use the Configure box. The file holds settings for my other plugins too, and this plugin reads only the four lines above.
 
 ## Each device's settings
 

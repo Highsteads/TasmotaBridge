@@ -23,7 +23,7 @@ Add an action, choose **Tasmota Bridge** and then the action from the list of ac
 | **Open Shutter** | Shutters | Opens the shutter fully. |
 | **Close Shutter** | Shutters | Closes the shutter fully. |
 | **Stop Shutter** | Shutters | Stops the shutter where it is. |
-| **Request Status Update** | Any device | Asks the device to send its full status to the broker. This version of the plugin does not read that reply, so to bring a device's readings up to date straight away, use **Send Raw Tasmota Command** with `TelePeriod` instead, which makes the device send its regular report now. |
+| **Request Status Update** | Any device | Asks the device for its full status and brings its readings up to date from the reply straight away — on or off, Wi-Fi signal, how long it has been running, and its sensor and energy readings. |
 | **Open Tasmota Web UI** | Any device | Opens the device's own web page in the web browser **on the Mac that runs Indigo**, not on the screen you are using if that is somewhere else. |
 | **Open Firmware Upgrade Page** | Any device | Opens the device's firmware upgrade page, in the same way. |
 | **Upgrade Firmware (one-click)** | Any device | Upgrades the device to the latest official Tasmota firmware, as the [Firmware updates](firmware.md) page explains. The device restarts and is away for a minute or so. |
@@ -53,3 +53,5 @@ The broker keeps each device's last online or offline announcement, and hands th
 - **Action** — **Any action**, or one kind of press: **Single press**, **Double press**, **Triple press**, **Quadruple press**, **Quintuple press**, **Long hold** or **Released**.
 
 It also runs for a button on a plug or switch, not only on a Tasmota Button device.
+
+A Tasmota button only tells the broker about a press once it is detached from its relay, with the Tasmota command `SetOption73 1`, which you can send with **Send Raw Tasmota Command**. After that a press no longer switches the relay by itself, so use the trigger to do that if you still want it. Without it, a press just switches the relay, and Indigo sees the relay change instead.

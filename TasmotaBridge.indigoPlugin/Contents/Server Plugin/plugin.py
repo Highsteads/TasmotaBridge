@@ -3,9 +3,14 @@
 # Filename:    plugin.py
 # Description: Indigo bridge for Tasmota MQTT devices (Sonoff, Athom, ESP-based).
 #              Auto-discovery via tasmota/discovery/<MAC>/{config,sensors}.
-# Author:      CliveS & Claude Fable 5.1
-# Date:        11-09-2026
-# Version:     0.7.9
+# Author:      CliveS & Claude Opus 5.5
+# Date:        27-09-2026
+# Version:     0.8.0
+#
+# v0.8.0 (27-09-2026): faults found writing the guide - both button payload shapes,
+# every Log Level applied at start and on save, colorMode filled, report states
+# declared on every type, ESP32 firmware by chip (and .bin, not the 404 .bin.gz),
+# the Status reply read, any broker change reconnects, dead setting removed.
 #
 # v0.7.7 (08-08-2026): REQUIRED Info.plist KEY. `CFBundleURLTypes` was MISSING,
 # so the plugin had no support URL for its "About" menu item — one of the SIX
@@ -65,7 +70,7 @@ import paho.mqtt.client as mqtt
 # ============================================================
 
 PLUGIN_ID       = "com.clives.indigoplugin.tasmotabridge"
-PLUGIN_VERSION  = "0.7.9"
+PLUGIN_VERSION  = "0.8.0"
 
 
 def _as_int(value, default):
@@ -74,6 +79,127 @@ def _as_int(value, default):
         return int(str(value).strip())
     except (ValueError, TypeError):
         return default
+
+
+def _as_bool(value, default=False):
+    """A checkbox pref is a real bool once saved, but a value can also arrive
+    as the strings "true"/"false" - and bool("false") is True."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return str(value).strip().lower() in ("true", "1", "yes", "on")
+
+
+def resolve_broker(prefs):
+    """The broker settings, in the one order used at start AND after a
+    Configure save: IndigoSecrets.py first for host, user name and password,
+    the Configure box first for the port, and TLS from the Configure box.
+
+    Before 0.8.0 the save path had its own copy with the order reversed for the
+    host, so after a save the dialog's address beat IndigoSecrets.py until the
+    next restart."""
+    prefs = prefs or {}
+    return {
+        "host":     MQTT_BROKER   or prefs.get("mqttHost", "") or "",
+        "port":     _as_int(prefs.get("mqttPort"), 0) or _as_int(MQTT_PORT, 0) or 1883,
+        "username": MQTT_USERNAME or prefs.get("mqttUsername", "") or "",
+        "password": MQTT_PASSWORD or prefs.get("mqttPassword", "") or "",
+        "tls":      _as_bool(prefs.get("mqttTLS"), False),
+    }
+
+
+def log_level_for(value):
+    """Map the Log Level menu value to a logging level; anything unknown is INFO."""
+    return _LOG_LEVELS.get(str(value or "").strip().upper(), logging.INFO)
+
+
+def parse_button_events(data):
+    """Return [(button_number, ACTION), ...] from a stat/<topic>/RESULT payload.
+
+    Tasmota sends a button press in two shapes. With SetOption73 1 (buttons
+    detached from the relays) it is {"Button1":{"Action":"SINGLE"}}, which is
+    what the Tasmota docs show. A flat {"Button1":"SINGLE"} is also accepted,
+    as a rule can publish one. Anything else is ignored."""
+    events = []
+    if not isinstance(data, dict):
+        return events
+    for key, val in data.items():
+        if not (isinstance(key, str) and key.startswith("Button") and key[6:].isdigit()):
+            continue
+        if isinstance(val, dict):
+            val = val.get("Action")
+        if not isinstance(val, str) or not val.strip():
+            continue
+        events.append((int(key[6:]), val.strip().upper()))
+    return events
+
+
+def light_colour_mode(light_subtype, data):
+    """The mode a Tasmota light is in, from its subtype (lt_st) and a report.
+
+    Tasmota has no mode field. A light with only one kind of output is always
+    in that mode. A light with both colour and white (4 = RGBW, 5 = RGBCW)
+    runs one or the other, and its White value says which: 0 means colour.
+    Returns None when the report cannot tell (no White value)."""
+    subtype = _as_int(light_subtype, 0)
+    if subtype == 1:
+        return "dimmer"
+    if subtype == 2:
+        return "ct"
+    if subtype == 3:
+        return "rgb"
+    if subtype in (4, 5):
+        white = data.get("White") if isinstance(data, dict) else None
+        if white is None:
+            return None
+        if _as_int(white, 0) == 0:
+            return "rgb"
+        return "white" if subtype == 4 else "ct"
+    return None
+
+
+# Official Tasmota OTA files by chip, from ota.tasmota.com. The ESP8266 build
+# is served gzipped; the ESP32 builds are not (tasmota32.bin.gz is a 404).
+_OTA_BASE_8266 = "http://ota.tasmota.com/tasmota/release"
+_OTA_BASE_32   = "http://ota.tasmota.com/tasmota32/release"
+OTA_URLS = {
+    "ESP8266":     f"{_OTA_BASE_8266}/tasmota.bin.gz",
+    "ESP32":       f"{_OTA_BASE_32}/tasmota32.bin",
+    "ESP32-SOLO1": f"{_OTA_BASE_32}/tasmota32solo1.bin",
+    "ESP32-S2":    f"{_OTA_BASE_32}/tasmota32s2.bin",
+    "ESP32-S3":    f"{_OTA_BASE_32}/tasmota32s3.bin",
+    "ESP32-C2":    f"{_OTA_BASE_32}/tasmota32c2.bin",
+    "ESP32-C3":    f"{_OTA_BASE_32}/tasmota32c3.bin",
+    "ESP32-C6":    f"{_OTA_BASE_32}/tasmota32c6.bin",
+}
+
+
+def chip_family(hardware):
+    """Map Tasmota's Status 2 "Hardware" string to a key of OTA_URLS, or None.
+
+    The strings are the ones Tasmota's GetDeviceHardware() returns, sometimes
+    with a revision after them ("ESP32-C3 v0.4"). A chip this does not
+    recognise returns None, and the plugin then refuses to upgrade rather than
+    send the wrong firmware."""
+    hw = (hardware or "").strip().upper()
+    if not hw:
+        return None
+    if "ESP8266" in hw or "ESP8285" in hw:
+        return "ESP8266"
+    if hw.startswith(("ESP8685", "ESP8686")) or hw.startswith("ESP32-C3"):
+        return "ESP32-C3"
+    if hw.startswith(("ESP8684", "ESP32-C2")):
+        return "ESP32-C2"
+    for prefix in ("ESP32-S3", "ESP32-S2", "ESP32-C6"):
+        if hw.startswith(prefix):
+            return prefix
+    # The original ESP32: single-core parts need the solo1 build.
+    if hw.startswith(("ESP32-S0WD", "ESP32-U4WDH-S")):
+        return "ESP32-SOLO1"
+    if hw.split()[0] == "ESP32" or hw.startswith(("ESP32-D0WD", "ESP32-D2WD", "ESP32-PICO", "ESP32-U4WDH-D")):
+        return "ESP32"
+    return None
 
 # Tasmota discovery topic root - the plugin's anchor.
 DISCOVERY_ROOT  = "tasmota/discovery"
@@ -174,7 +300,7 @@ class Plugin(indigo.PluginBase):
     def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
         super().__init__(pluginId, pluginDisplayName, pluginVersion, pluginPrefs)
 
-        self.debug = pluginPrefs.get("logLevel", "INFO") == "DEBUG"
+        # Log Level is applied in startup() and on every Configure save.
         self.log_raw = bool(pluginPrefs.get("logRawPayloads", False))
         self.timestamp_enabled = bool(pluginPrefs.get("timestampEnabled", True))
 
@@ -199,12 +325,9 @@ class Plugin(indigo.PluginBase):
         self.mqtt_client = None
         self.mqtt_connected = False
 
-        # Resolve broker config: IndigoSecrets > pluginPrefs
-        self.mqtt_host     = MQTT_BROKER     or pluginPrefs.get("mqttHost", "")
-        self.mqtt_port     = _as_int(pluginPrefs.get("mqttPort"), 0) or MQTT_PORT or 1883
-        self.mqtt_username = MQTT_USERNAME   or pluginPrefs.get("mqttUsername", "")
-        self.mqtt_password = MQTT_PASSWORD   or pluginPrefs.get("mqttPassword", "")
-        self.mqtt_tls      = bool(pluginPrefs.get("mqttTLS", False))
+        # Resolve broker config - one owner of the order, shared with the
+        # Configure-save path (see resolve_broker).
+        self._set_broker(resolve_broker(pluginPrefs))
 
         self.auto_create   = bool(pluginPrefs.get("autoCreateDevices", True))
 
@@ -228,6 +351,7 @@ class Plugin(indigo.PluginBase):
     # --------------------------------------------------------
 
     def startup(self):
+        self._apply_log_level(self.pluginPrefs.get("logLevel", "INFO"))
         if not self.mqtt_host:
             self.logger.error(
                 "No MQTT broker configured. Set MQTT_BROKER in IndigoSecrets.py "
@@ -239,6 +363,34 @@ class Plugin(indigo.PluginBase):
 
     def shutdown(self):
         self._mqtt_disconnect()
+
+    def _apply_log_level(self, value):
+        """Apply the Log Level pref to the EVENT LOG handler only, so the
+        plugin's own log file keeps its debug lines whatever is chosen.
+        Before 0.8.0 only Debug was honoured, and only after a restart."""
+        handler = getattr(self, "indigo_log_handler", None)
+        if handler is None:
+            return
+        try:
+            handler.setLevel(log_level_for(value))
+        except Exception as exc:
+            self.logger.debug(f"Could not set the log level: {exc}")
+
+    def _broker(self):
+        return {
+            "host":     self.mqtt_host,
+            "port":     self.mqtt_port,
+            "username": self.mqtt_username,
+            "password": self.mqtt_password,
+            "tls":      self.mqtt_tls,
+        }
+
+    def _set_broker(self, broker):
+        self.mqtt_host     = broker["host"]
+        self.mqtt_port     = broker["port"]
+        self.mqtt_username = broker["username"]
+        self.mqtt_password = broker["password"]
+        self.mqtt_tls      = broker["tls"]
 
     # --------------------------------------------------------
     # MQTT
@@ -587,6 +739,23 @@ class Plugin(indigo.PluginBase):
             except json.JSONDecodeError:
                 return
             self._handle_result(dev, data)
+        elif kind_u.startswith("STATUS"):
+            # The reply to "Status 0" (Request Status Update). Current Tasmota
+            # sends it as one STATUS0 message; older firmware sends STATUS,
+            # STATUS1 .. STATUS11 separately. Either way the regular report's
+            # contents are under StatusSTS and the sensor readings under
+            # StatusSNS, so they go through the same code as tele/STATE and
+            # tele/SENSOR. Before 0.8.0 the reply was never read.
+            try:
+                data = json.loads(payload)
+            except json.JSONDecodeError:
+                return
+            if not isinstance(data, dict):
+                return
+            if isinstance(data.get("StatusSTS"), dict):
+                self._apply_state(dev, data["StatusSTS"])
+            if isinstance(data.get("StatusSNS"), dict):
+                self._apply_sensor(dev, data["StatusSNS"])
 
     def _find_device_by_topic_channel(self, topic_name, channel):
         """Look up an Indigo device by Tasmota topic AND relay channel.
@@ -663,7 +832,11 @@ class Plugin(indigo.PluginBase):
             data = json.loads(payload)
         except json.JSONDecodeError:
             return
+        if isinstance(data, dict):
+            self._apply_state(dev, data)
 
+    def _apply_state(self, dev, data):
+        """Apply a STATE report: tele/<topic>/STATE, or StatusSTS in a Status reply."""
         bare_mac = self._bare_mac(dev)
         if bare_mac:
             self.last_seen[bare_mac] = time.time()
@@ -692,12 +865,20 @@ class Plugin(indigo.PluginBase):
             dev.updateStateOnServer("restartReason", data["RestartReason"])
         dev.updateStateOnServer("lastSeen", data.get("Time", datetime.now().isoformat()))
 
+        # A light's STATE carries its Dimmer / Color / CT / White too.
+        if dev.deviceTypeId == "tasmotaLight":
+            self._apply_light_fields(dev, data)
+
     def _handle_sensor(self, dev, payload):
         try:
             data = json.loads(payload)
         except json.JSONDecodeError:
             return
+        if isinstance(data, dict):
+            self._apply_sensor(dev, data)
 
+    def _apply_sensor(self, dev, data):
+        """Apply a SENSOR report: tele/<topic>/SENSOR, or StatusSNS in a Status reply."""
         bare_mac = self._bare_mac(dev)
         if bare_mac:
             self.last_seen[bare_mac] = time.time()
@@ -757,38 +938,15 @@ class Plugin(indigo.PluginBase):
         Tasmota sends a wide variety of RESULT shapes here. We handle the
         main ones explicitly and let the rest fall through unhandled.
         """
-        # Button events: {"Button1": "SINGLE"}, {"Button2": "HOLD"}, etc.
-        for k, v in data.items():
-            if k.startswith("Button") and k[6:].isdigit():
-                try:
-                    button_num = int(k[6:])
-                except ValueError:
-                    continue
-                action = str(v).upper()
-                self._fire_button_event(dev, button_num, action)
+        # Button events: {"Button1":{"Action":"SINGLE"}} (SetOption73 1), or
+        # the flat {"Button1":"SINGLE"}. Before 0.8.0 only the flat shape was
+        # read, so the documented one reached lastAction and the trigger's
+        # Action filter as the text of a whole dictionary.
+        for button_num, action in parse_button_events(data):
+            self._fire_button_event(dev, button_num, action)
 
-        # Dimmer: {"POWER":"ON","Dimmer":50}
-        if "Dimmer" in data and dev.deviceTypeId == "tasmotaLight":
-            try:
-                level = int(data["Dimmer"])
-                dev.updateStateOnServer("brightnessLevel", max(0, min(100, level)))
-            except (TypeError, ValueError):
-                pass
-
-        # CT (mireds): {"CT": 300}
-        if "CT" in data and dev.deviceTypeId == "tasmotaLight":
-            try:
-                dev.updateStateOnServer("colorTemp", int(data["CT"]))
-            except (TypeError, ValueError):
-                pass
-
-        # HSBColor: "0,100,100"
-        if "HSBColor" in data and dev.deviceTypeId == "tasmotaLight":
-            dev.updateStateOnServer("hsbColor", str(data["HSBColor"]))
-
-        # Color: "#RRGGBB" or "RRGGBB"
-        if "Color" in data and dev.deviceTypeId == "tasmotaLight":
-            dev.updateStateOnServer("hsbColor", str(data["Color"]))
+        if dev.deviceTypeId == "tasmotaLight":
+            self._apply_light_fields(dev, data)
 
         # Shutter position: {"Shutter1":{"Position":50, "Direction":0, ...}}
         for k, v in data.items():
@@ -804,6 +962,38 @@ class Plugin(indigo.PluginBase):
                         dev.updateStateOnServer("direction", direction_map.get(int(v["Direction"]), str(v["Direction"])))
                     except (TypeError, ValueError):
                         pass
+
+    def _apply_light_fields(self, dev, data):
+        """Brightness, colour and colour mode from a light's RESULT or STATE."""
+        # Dimmer: {"POWER":"ON","Dimmer":50}
+        if "Dimmer" in data:
+            try:
+                level = int(data["Dimmer"])
+                dev.updateStateOnServer("brightnessLevel", max(0, min(100, level)))
+            except (TypeError, ValueError):
+                pass
+
+        # CT (mireds): {"CT": 300}
+        if "CT" in data:
+            try:
+                dev.updateStateOnServer("colorTemp", int(data["CT"]))
+            except (TypeError, ValueError):
+                pass
+
+        # HSBColor: "0,100,100"
+        if "HSBColor" in data:
+            dev.updateStateOnServer("hsbColor", str(data["HSBColor"]))
+
+        # Color: "#RRGGBB" or "RRGGBB"
+        if "Color" in data:
+            dev.updateStateOnServer("hsbColor", str(data["Color"]))
+
+        # Colour mode, declared since the first version and never written
+        # until 0.8.0. Only written when the report says something.
+        if any(k in data for k in ("Dimmer", "CT", "HSBColor", "Color", "White")):
+            mode = light_colour_mode(dev.pluginProps.get("lightSubtype"), data)
+            if mode:
+                dev.updateStateOnServer("colorMode", mode)
 
     def _fire_button_event(self, dev, button_num, action):
         """Update device button states and fire buttonPressed triggers.
@@ -1111,13 +1301,21 @@ class Plugin(indigo.PluginBase):
     # --------------------------------------------------------
 
     def _detect_device_architecture(self, dev):
-        """Determine ESP architecture for a device. Returns 'ESP32', 'ESP8266',
-        or None on failure. Caches the result in pluginProps so subsequent
-        upgrades skip the HTTP probe.
+        """Determine the device's chip family, a key of OTA_URLS ('ESP8266',
+        'ESP32', 'ESP32-C3', 'ESP32-S3' ...), or None when the probe fails or
+        the chip is not one we know the firmware for. Cached in the 'chip'
+        prop so later upgrades skip the HTTP probe.
+
+        Before 0.8.0 every ESP32 was cached as plain 'ESP32' in the 'arch'
+        prop and sent the standard ESP32 firmware, which is wrong for a C3 or
+        S3. That old cache is only trusted for 'ESP8266', which it got right;
+        an old 'ESP32' is probed again.
         """
-        cached = dev.pluginProps.get("arch", "")
-        if cached in ("ESP32", "ESP8266"):
+        cached = dev.pluginProps.get("chip", "")
+        if cached in OTA_URLS:
             return cached
+        if dev.pluginProps.get("arch", "") == "ESP8266":
+            return "ESP8266"
 
         ip = dev.pluginProps.get("ip", "")
         if not ip:
@@ -1131,21 +1329,21 @@ class Plugin(indigo.PluginBase):
             )
             if resp.status_code != 200:
                 return None
-            hw = (resp.json().get("StatusFWR", {}).get("Hardware", "") or "").upper()
-            if "ESP32" in hw:
-                arch = "ESP32"
-            elif "ESP8266" in hw or "ESP8285" in hw:
-                arch = "ESP8266"
-            else:
-                return None
-            # Cache in pluginProps
-            props = dict(dev.pluginProps)
-            props["arch"] = arch
-            dev.replacePluginPropsOnServer(props)
-            return arch
+            hw = resp.json().get("StatusFWR", {}).get("Hardware", "") or ""
         except Exception as exc:
             self.logger.debug(f"Architecture probe of {ip} failed: {exc}")
             return None
+        chip = chip_family(hw)
+        if not chip:
+            self.logger.warning(
+                f"{dev.name}: the device reports its chip as '{hw}', which this "
+                "plugin does not know the Tasmota firmware for"
+            )
+            return None
+        props = dict(dev.pluginProps)
+        props["chip"] = chip
+        dev.replacePluginPropsOnServer(props)
+        return chip
 
     def actionUpgradeFirmware(self, action, dev):
         """Detect ESP architecture, set OTA URL to the matching official
@@ -1164,14 +1362,12 @@ class Plugin(indigo.PluginBase):
             return
 
         arch = self._detect_device_architecture(dev)
-        if arch == "ESP32":
-            ota_url = "http://ota.tasmota.com/tasmota32/release/tasmota32.bin.gz"
-        elif arch == "ESP8266":
-            ota_url = "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"
-        else:
+        ota_url = OTA_URLS.get(arch or "")
+        if not ota_url:
             self.logger.warning(
-                f"{dev.name}: could not detect ESP architecture (HTTP probe failed). "
-                "Open the device's /up page manually."
+                f"{dev.name}: not upgraded - could not tell which Tasmota firmware "
+                "this chip needs. Upgrade it from its own page with the "
+                "Open Firmware Upgrade Page action."
             )
             return
 
@@ -1313,18 +1509,30 @@ class Plugin(indigo.PluginBase):
         if userCancelled:
             return
         # Re-read prefs that affect runtime behaviour
+        self._apply_log_level(valuesDict.get("logLevel", "INFO"))
         self.log_raw   = bool(valuesDict.get("logRawPayloads", False))
         self.auto_create = bool(valuesDict.get("autoCreateDevices", True))
-        new_host = valuesDict.get("mqttHost", "") or MQTT_BROKER
-        if new_host != self.mqtt_host:
-            self.logger.info("Broker config changed - reconnecting MQTT")
-            self._mqtt_disconnect()
-            self.mqtt_host     = new_host
-            self.mqtt_port     = int(valuesDict.get("mqttPort", "1883") or 1883)
-            self.mqtt_username = valuesDict.get("mqttUsername", "") or MQTT_USERNAME
-            self.mqtt_password = valuesDict.get("mqttPassword", "") or MQTT_PASSWORD
-            self.mqtt_tls      = bool(valuesDict.get("mqttTLS", False))
-            self._mqtt_connect()
+
+        # Reconnect on ANY broker change, resolved in the same order as at
+        # start. Before 0.8.0 only a new host reconnected, and the save path
+        # put the dialog's host ahead of IndigoSecrets.py.
+        broker = resolve_broker(valuesDict)
+        if broker == self._broker():
+            return
+        self.logger.info("Broker settings changed - reconnecting MQTT")
+        self._mqtt_disconnect()
+        self._set_broker(broker)
+        if not self.mqtt_host:
+            self.logger.error(
+                "No MQTT broker configured. Set MQTT_BROKER in IndigoSecrets.py "
+                "or fill Broker Host in Plugins -> Tasmota Bridge -> Configure..."
+            )
+            return
+        if not self.startup_time:
+            # startup() found no broker and never started the clock that the
+            # one-shot firmware check waits on.
+            self.startup_time = time.time()
+        self._mqtt_connect()
 
     # --------------------------------------------------------
     # Menu handlers
@@ -1501,8 +1709,8 @@ class Plugin(indigo.PluginBase):
             for name, cur_str, _ in out_of_date:
                 self.logger.info(f"  {name}  ({cur_str} -> {latest_str})")
             self.logger.info(
-                "Use 'Plugins -> Tasmota Bridge -> Open Tasmota Device Page...' "
-                "to open each device's firmware page."
+                "Use 'Plugins -> Tasmota Bridge -> Upgrade Tasmota Firmware...' "
+                "to upgrade each one."
             )
         elif up_to_date and not unknown:
             self.logger.info(
