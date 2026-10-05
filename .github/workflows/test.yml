@@ -35,7 +35,12 @@ jobs:
       # here also makes CI the first thing that checks requirements.txt is
       # actually installable.
       - name: Install plugin dependencies
-        run: pip install -r "TasmotaBridge.indigoPlugin/Contents/Server Plugin/requirements.txt"
+        # requests is left out of requirements.txt on purpose: Indigo ships it, and
+        # pinning it would drag a second copy into Contents/Packages on every install.
+        # A bare runner has no Indigo, so it is added here.
+        run: |
+          pip install -r "TasmotaBridge.indigoPlugin/Contents/Server Plugin/requirements.txt"
+          pip install requests
       - name: Contract tests (pytest)
         run: |
           pip install pytest
