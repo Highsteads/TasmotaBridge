@@ -7,7 +7,7 @@
 #              at repo-root tests/ so the zoo fixtures stay OUT of the shipped
 #              bundle. TasmotaBridge had no test suite before this.
 # Author:      CliveS & Claude Opus 4.8
-# Date:        13-06-2026
+# Date:        13-06-2026 (live_guard added 05-10-2026)
 
 from __future__ import annotations
 
@@ -24,6 +24,16 @@ THIS       = Path(__file__).resolve()
 TESTS_DIR  = THIS.parent
 REPO_ROOT  = TESTS_DIR.parent
 SERVER_DIR = REPO_ROOT / "TasmotaBridge.indigoPlugin" / "Contents" / "Server Plugin"
+
+# ── keep the suite off the live system (BEFORE anything imports plugin.py) ───
+# An empty stand-in IndigoSecrets, so the real broker address and credentials on
+# this Mac are never read, and a block on every real socket connect for the
+# whole session. Without it, test_log_level_applied_at_start's startup() opened
+# a paho session to the live Mosquitto broker with real credentials.
+sys.path.insert(0, str(TESTS_DIR))
+import live_guard  # noqa: E402
+
+live_guard.install()
 
 # ── indigo stub (installed before plugin import) ─────────────────────────────
 _indigo = types.ModuleType("indigo")
@@ -43,7 +53,6 @@ for _name in ("kDeviceAction", "kDimmerAction", "kSensorAction",
 sys.modules["indigo"] = _indigo
 
 sys.path.insert(0, str(SERVER_DIR))
-sys.path.insert(0, str(TESTS_DIR))
 os.chdir(str(SERVER_DIR))
 
 _spec = importlib.util.spec_from_file_location("plugin", str(SERVER_DIR / "plugin.py"))
@@ -66,3 +75,23 @@ except Exception:  # noqa: BLE001 - Plugin() init may need full Indigo; module-l
 def plugin_mod():
     """The imported plugin module — for the classifier under test."""
     return _plugin
+
+
+@pytest.fixture(autouse=True)
+def _no_live_connection():
+    """Fail any test during which something tried a real connection, even one
+    swallowed by the code under test or made on a background thread."""
+    before = len(live_guard.ATTEMPTS)
+    yield
+    leaked = live_guard.ATTEMPTS[before:]
+    if leaked:
+        pytest.fail(f"real network connection attempted during this test: {leaked}")
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """A connect that lands after its test has finished (a paho loop thread)
+    still fails the run."""
+    if live_guard.ATTEMPTS:
+        session.exitstatus = 1
+        print(f"\nlive_guard: real network connection attempted: {live_guard.ATTEMPTS}")
+
